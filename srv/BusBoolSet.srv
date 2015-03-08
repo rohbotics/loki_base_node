@@ -1,0 +1,7 @@
+int16 address
+int8 command
+bool value
+int8 retries
+int8 priority
+---
+int8 status

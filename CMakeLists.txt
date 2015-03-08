@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -51,11 +52,27 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+   FILES
+   BusBoolGet.srv
+   BusBoolSet.srv
+   BusInt16Get.srv
+   BusInt16Set.srv
+   BusInt32Get.srv
+   BusInt32Set.srv
+   BusInt64Get.srv
+   BusInt64Set.srv
+   BusInt8Get.srv
+   BusInt8Set.srv
+   BusUInt16Get.srv
+   BusUInt16Set.srv
+   BusUInt32Get.srv
+   BusUInt32Set.srv
+   BusUInt64Get.srv
+   BusUInt64Set.srv
+   BusUInt8Get.srv
+   BusUInt8Set.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -65,10 +82,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs
-# )
+generate_messages(
+  DEPENDENCIES
+   std_msgs
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -82,7 +99,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES bus_server
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+   CATKIN_DEPENDS message_runtime roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
 
