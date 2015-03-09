@@ -67,8 +67,9 @@ class Bus_Base:
 	self.response = []
 	self.same_address_requests = 0
 	self.serial = serial
-	self.trace = True
+	self.trace = False
 	self.trace_pad = ""
+	self.mutex = thread.allocate_lock()
 
 	#FIXME: Only open serial if it is not already open:
 	#serial.open()
@@ -109,6 +110,69 @@ class Bus_Base:
 	    self.frame_put(0x185)
 	    self.flush()
 	    time.sleep(0.05)
+
+    def bus_reset(self):
+	""" {Bus_Base}: Reset the bus. """
+
+	trace = self.trace
+	if trace:
+	    print("=>bus_reset()")
+
+	# Shove a 0xc5 out there to force a bus reset:
+	serial = self.serial
+	serial.write(chr(0xc5))
+	serial.flush()
+
+	# Wait for a response:
+	byte = serial.read(1)
+	if len(byte) == 0:
+	    print("Bus reset failed with no response")
+	elif ord(byte) != 0xa5:
+	    print("Bus reset failed 0x{0:x}".format(ord(byte)))
+	else:
+	    if trace:
+		print("Bus reset succeeded")
+
+	if trace:
+	    print("<=bus_reset()")
+
+    def discovery_mode(self):
+	""" {Bus_Base}: Perform discovery mode """
+
+	trace = self.trace
+	if trace:
+	    trace_pad = self.trace_pad
+	    self.trace_pad = trace_pad + " "
+
+
+	serial = self.serial
+	serial.write(chr(0xc4))
+	if trace:
+	    print("{0}write(0xc4)".format(trace_pad))
+
+	serial.flush()
+	line = []
+	ids = []
+	done = False
+	while not done:
+	    byte = serial.read(1)
+
+	    if trace:
+		print("{0}read() => 0x{1:x}".format(trace_pad, ord(byte)))
+
+	    if byte == '\n':
+		ids.append("".join(line[1:]))
+		done = len(line) != 0 and line[0] == '!'
+		del line[:]
+	    else:
+		line.append(byte)
+
+	if trace:
+	    self.trace_pad = trace_pad
+	    print("{0}<=Bus.discovery_mode() =>{1}". \
+	      format(trace_pad, ids))
+
+	return ids
 
     def flush(self):
 	""" Bus_Base: Flush out current request. """
@@ -193,69 +257,6 @@ class Bus_Base:
 	    self.trace_pad = trace_pad
 	    print("{0}<=Bus.flush() response={1}". \
 	      format(trace_pad, self.response))
-
-    def bus_reset(self):
-	""" {Bus_Base}: Reset the bus. """
-
-	trace = self.trace
-	if trace:
-	    print("=>bus_reset()")
-
-	# Shove a 0xc5 out there to force a bus reset:
-	serial = self.serial
-	serial.write(chr(0xc5))
-	serial.flush()
-
-	# Wait for a response:
-	byte = serial.read(1)
-	if len(byte) == 0:
-	    print("Bus reset failed with no response")
-	elif ord(byte) != 0xa5:
-	    print("Bus reset failed 0x{0:x}".format(ord(byte)))
-	else:
-	    if trace:
-		print("Bus reset succeeded")
-
-	if trace:
-	    print("<=bus_reset()")
-
-    def discovery_mode(self):
-	""" {Bus_Base}: Perform discovery mode """
-
-	trace = self.trace
-	if trace:
-	    trace_pad = self.trace_pad
-	    self.trace_pad = trace_pad + " "
-
-
-	serial = self.serial
-	serial.write(chr(0xc4))
-	if trace:
-	    print("{0}write(0xc4)".format(trace_pad))
-
-	serial.flush()
-	line = []
-	ids = []
-	done = False
-	while not done:
-	    byte = serial.read(1)
-
-	    if trace:
-		print("{0}read() => 0x{1:x}".format(trace_pad, ord(byte)))
-
-	    if byte == '\n':
-		ids.append("".join(line[1:]))
-		done = len(line) != 0 and line[0] == '!'
-		del line[:]
-	    else:
-		line.append(byte)
-
-	if trace:
-	    self.trace_pad = trace_pad
-	    print("{0}<=Bus.discovery_mode() =>{1}". \
-	      format(trace_pad, ids))
-
-	return ids
 
     def frame_get(self):
 	""" {Bus_Base}: Return the next frame from the bus connected
@@ -767,110 +768,271 @@ class Bus_Server:
 
     def __init__(self):
 	""" Bus_Server: Initialize *self*. """
-	registers = {}
-	registers["bool"] = False
-	registers["int16"] = -16
-	registers["int32"] = -32
-	registers["int64"] = -64
-	registers["int8"] = -8
-	registers["uint16"] = 16
-	registers["uint32"] = 32
-	registers["uint64"] = 64
-	registers["uint8"] = 8
 
-	self.registers = registers
+	bus_base = Bus_Base(None)
+	self.bus_base = bus_base
 
     # Below are the call back routines that are invode when a service
     # request comes in.
 
     def bus_bool_get(self, request):
 	""" Bus_Server: Get a boolean. """
-	return BusBoolGetResponse(self.registers["bool"], 0)
+
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	ubyte = bus_base.response_ubyte_get()
+	bus_base.response_end()
+	mutex.release()
+	value = False
+	if ubyte != 0:
+	    value = True
+	return BusBoolGetResponse(value, 0)
 
     def bus_bool_set(self, request):
 	""" Bus_Server: Set a boolean. """
-	self.registers["bool"] = request.value
+
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	ubyte = 0
+	if request.value:
+	    ubyte = 1
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_ubyte_put(ubyte)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
 	return BusBoolSetResponse(0)
 
     def bus_int16_get(self, request):
-	return BusInt16GetResponse(self.registers["int16"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_short_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusInt16GetResponse(value, 0)
 
     def bus_int16_set(self, request):
-	self.registers["int16"] = request.value
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_short_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
 	return BusInt16SetResponse(0)
 
     def bus_int32_get(self, request):
-	return BusInt32GetResponse(self.registers["int32"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_integer_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusInt32GetResponse(value, 0)
 
     def bus_int32_set(self, request):
-	self.registers["int32"] = request.value
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_integer_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
         return BusInt32SetResponse(0)
 
     def bus_int64_get(self, request):
-	return BusInt64GetResponse(self.registers["int64"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_long_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusInt64GetResponse(value, 0)
 
     def bus_int64_set(self, request):
-	self.registers["int64"] = request.value
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_long_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
 	return BusInt64SetResponse(0)
 
     def bus_int8_get(self, request):
-	return BusInt8GetResponse(self.registers["int8"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_byte_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusInt8GetResponse(value, 0)
 
     def bus_int8_set(self, request):
-	self.registers["int8"] = request.value
-	return BusInt8SetResponse(0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_byte_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
+        return BusInt8SetResponse(0)
 
     def bus_uint16_get(self, request):
-	return BusUint16GetResponse(self.registers["uint16"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_ushort_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt16GetResponse(value, 0)
 
     def bus_uint16_set(self, request):
-	self.registers["uint16"] = request.value
-	return BusUint16SetResponse(0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_ushort_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt16SetResponse(0)
 
     def bus_uint32_get(self, request):
-	return BusUint32GetResponse(self.registers["uint32"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_uinteger_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt32GetResponse(value, 0)
 
     def bus_uint32_set(self, request):
-	self.registers["uint32"] = request.value
-	return BusUint32SetResponse(0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_uinteger_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
+        return BusUInt32SetResponse(0)
 
     def bus_uint64_get(self, request):
-	return BusUint64GetResponse(self.registers["uint64"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_ulong_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt64GetResponse(value, 0)
 
     def bus_uint64_set(self, request):
-	self.registers["uint64"] = request.value
-	return BusUint64SetResponse(0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_ulong_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt64SetResponse(0)
 
     def bus_uint8_get(self, request):
-	return BusUint8GetResponse(self.registers["uint8"], 0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_end()
+	bus_base.response_begin()
+	value = bus_base.response_ubyte_get()
+	bus_base.response_end()
+	mutex.release()
+	return BusUInt8GetResponse(value, 0)
 
     def bus_uint8_set(self, request):
-	self.registers["uint8"] = request.value
-	return BusUint8SetResponse(0)
+	bus_base = self.bus_base
+	mutex = bus_base.mutex
+	mutex.acquire()
+	bus_base.request_begin(request.address, request.command)
+	bus_base.request_ubyte_put(request.value)
+	bus_base.request_end()
+	bus_base.flush()
+	bus_base.response_begin()
+	bus_base.response_end()
+	mutex.release()
+        return BusUInt8SetResponse(0)
 
     def run(self):
 	# Register the server name:
 	rospy.init_node("bus_server_server")
 
 	# Register all of the services:
-	rospy.Service("bus_bool_get", BusBoolGet, self.bus_bool_get)
-	rospy.Service("bus_bool_set", BusBoolSet, self.bus_bool_set)
-	rospy.Service("bus_int16_get", BusInt16Get, self.bus_int16_get)
-	rospy.Service("bus_int16_set", BusInt16Set, self.bus_int16_set)
-	rospy.Service("bus_int32_get", BusInt32Get, self.bus_int32_get)
-	rospy.Service("bus_int32_set", BusInt32Set, self.bus_int32_set)
-	rospy.Service("bus_int64_get", BusInt64Get, self.bus_int64_get)
-	rospy.Service("bus_int64_set", BusInt64Set, self.bus_int64_set)
-	rospy.Service("bus_int8_get", BusInt8Get, self.bus_int8_get)
-	rospy.Service("bus_int8_set", BusInt8Set, self.bus_int8_set)
+	rospy.Service("bus_bool_get",   BusBoolGet,   self.bus_bool_get)
+	rospy.Service("bus_bool_set",   BusBoolSet,   self.bus_bool_set)
+	rospy.Service("bus_int16_get",  BusInt16Get,  self.bus_int16_get)
+	rospy.Service("bus_int16_set",  BusInt16Set,  self.bus_int16_set)
+	rospy.Service("bus_int32_get",  BusInt32Get,  self.bus_int32_get)
+	rospy.Service("bus_int32_set",  BusInt32Set,  self.bus_int32_set)
+	rospy.Service("bus_int64_get",  BusInt64Get,  self.bus_int64_get)
+	rospy.Service("bus_int64_set",  BusInt64Set,  self.bus_int64_set)
+	rospy.Service("bus_int8_get",   BusInt8Get,   self.bus_int8_get)
+	rospy.Service("bus_int8_set",   BusInt8Set,   self.bus_int8_set)
 	rospy.Service("bus_uint16_get", BusUInt16Get, self.bus_uint16_get)
 	rospy.Service("bus_uint16_set", BusUInt16Set, self.bus_uint16_set)
 	rospy.Service("bus_uint32_get", BusUInt32Get, self.bus_uint32_get)
 	rospy.Service("bus_uint32_set", BusUInt32Set, self.bus_uint32_set)
 	rospy.Service("bus_uint64_get", BusUInt64Get, self.bus_uint64_get)
 	rospy.Service("bus_uint64_set", BusUInt64Set, self.bus_uint64_set)
-	rospy.Service("bus_uint8_get", BusUInt8Get, self.bus_uint8_get)
-	rospy.Service("bus_uint8_set", BusUInt8Set, self.bus_uint8_set)
+	rospy.Service("bus_uint8_get",  BusUInt8Get,  self.bus_uint8_get)
+	rospy.Service("bus_uint8_set",  BusUInt8Set,  self.bus_uint8_set)
 
 	# Start the server node:
 	print("Starting bus_server_server")
