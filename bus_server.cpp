@@ -19,7 +19,7 @@ AVR_UART *host_uart = &avr_uart0;
 Bus_Slave bus_slave((UART *)bus_uart, (UART *)host_uart);
 
 // The two PID set points are defined here:
-SetPointInfo leftPID, rightPID;
+Bus_Motor_Encoder left_motor_encoder, right_motor_encoder;
 
 // Set the *LED* to the value of *led*:
 void led_set(Logical led) {
@@ -41,12 +41,6 @@ void led_blink(UShort on, UShort off) {
 
 static UByte address = 33;
 
-static Short Kp = 20;	// PID Proportional Constant
-static Short Kd = 12;	// PID Differential Constant
-static Short Ki = 0;	// PID Integal Constant
-static Short Ko = 50;	// PID common denOminator 
-static Byte const MAX_PWM = 127;
-
 static Logical is_moving = (Logical)0;
 
 void motor_speeds_set(Byte left_speed, Byte right_speed) {
@@ -57,75 +51,29 @@ void motor_speeds_set(Byte left_speed, Byte right_speed) {
     bus_slave.flush();
 }
 
-void pid_reset(SetPointInfo *pid){
-   pid->TargetTicksPerFrame = 0.0;
-   // Leave *encoder* field alone:
-   //pid->Encoder = 0;
-   pid->PrevEnc = leftPID.Encoder;
-   pid->output = 0;
-   pid->PrevInput = 0;
-   pid->ITerm = 0;
-}
-
-void do_pid(SetPointInfo *pid) {
-  Integer Perror;
-  Integer output;
-  Short input;
-
-  //Perror = pid->TargetTicksPerFrame - (pid->Encoder - pid->PrevEnc);
-  input = pid->Encoder - pid->PrevEnc;
-  Perror = pid->TargetTicksPerFrame - input;
-
-  // Avoid derivative kick and allow tuning changes, see:
-  //
-  //   http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-derivative-kick/
-  //   http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-tuning-changes/
-
-  //output =
-  // (Kp * Perror + Kd * (Perror - pid->PrevErr) + Ki * pid->Ierror) / Ko;
-  // p->PrevErr = Perror;
-  output = (Kp * Perror - Kd * (input - pid->PrevInput) + pid->ITerm) / Ko;
-  pid->PrevEnc = pid->Encoder;
-
-  output += pid->output;
-  // Accumulate Integral error *or* Limit output.
-  // Stop accumulating when output saturates
-  if (output >= MAX_PWM)
-    output = MAX_PWM;
-  else if (output <= -MAX_PWM)
-    output = -MAX_PWM;
-  else
-    // allow turning changes, see http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-tuning-changes/
-    pid->ITerm += Ki * Perror;
-
-  pid->output = output;
-  pid->PrevInput = input;
-}
-
 void pid_update() {
   static Byte last_left_speed = 0x80;
   static Byte last_right_speed = 0x80;
 
   if (is_moving) {
     // Read the encoders:
-    leftPID.Encoder = bus_slave.command_integer_get(address, 2);
-    rightPID.Encoder = bus_slave.command_integer_get(address, 4);
+    left_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 2));
+    right_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 4));
   
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"+");
-    do_pid(&rightPID);
-    do_pid(&leftPID);
+    right_motor_encoder.do_pid();
+    left_motor_encoder.do_pid();
 
     /* Set the motor speeds accordingly */
     //debug_uart->string_print((Text)" l=");
-    //debug_uart->integer_print((UInteger)leftPID.output);
+    //debug_uart->integer_print((UInteger)left_motor_encoder.output);
     //debug_uart->string_print((Text)" r=");
-    //debug_uart->integer_print((UInteger)rightPID.output);
+    //debug_uart->integer_print((UInteger)right_motor_encoder.output);
     //debug_uart->string_print((Text)"\r\n");
 
-    Byte left_speed = (Byte)leftPID.output;
-    Byte right_speed = (Byte)rightPID.output;
-    
+    Byte left_speed = (Byte)left_motor_encoder.output_get();
+    Byte right_speed = (Byte)right_motor_encoder.output_get();
 
     if (left_speed != last_left_speed) {
         bus_slave.command_byte_put(address,  9, left_speed);
@@ -140,7 +88,7 @@ void pid_update() {
 
     is_moving = (Logical)(left_speed != 0) || (right_speed != 0);
 
-    //motor_speeds_set((Byte)leftPID.output, (Byte)rightPID.output);
+    //motor_speeds_set((Byte)left_motor_encoder.output, (Byte)right_motor_encoder.output);
   } else {
     //debug_uart->string_print((Text)"-");
 
@@ -150,9 +98,9 @@ void pid_update() {
     // PrevInput is considered a good proxy to detect
     // whether reset has already happened
 
-    if (leftPID.PrevInput != 0 || rightPID.PrevInput != 0) {
-	pid_reset(&leftPID);
-	pid_reset(&rightPID);
+    if (!left_motor_encoder.is_reset() || !right_motor_encoder.is_reset()) {
+      left_motor_encoder.reset();
+      right_motor_encoder.reset();
     }
   }
 }
@@ -350,9 +298,9 @@ void bridge_setup(UByte test) {
       break;
     case TEST_BUS_LINE:
       // No announce because we are talking to *host_uart*:
-      host_uart->string_print((Character *)"\r\nbb_line:\r\n");
       host_uart->interrupt_set((Logical)1);
       bus_uart->interrupt_set((Logical)1);
+      host_uart->string_print((Character *)"\r\nros_ard_bridge_protocol:\r\n");
       break;
   }
 }
@@ -428,6 +376,11 @@ void bridge_loop(UByte test) {
 	if (character == '\r') {
 	  // Dispatch on *command* character:
 	  switch (command) {
+	    case 'b': {
+	      // Print out baud rate ("b"):
+	      host_uart->string_print((Text)"115200\r\n");
+	      break;
+	    }
 	    case 'e': {
 	      // Read encoders ("e"):
 	      Integer encoder0 = bus_slave.command_integer_get(address, 2);
@@ -441,8 +394,8 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'm': {
 	      // Set motor speeds ("m left, right"):
-	      Byte left_speed = (Byte)arguments[0];
-	      Byte right_speed = (Byte)arguments[1];
+	      Integer left_speed = arguments[0];
+	      Integer right_speed = arguments[1];
 	      
 	      //bus.command_byte_put(address, 9, left_speed);
 	      //Byte xleft_speed = bus.command_byte_get(address, 8);
@@ -466,8 +419,8 @@ void bridge_loop(UByte test) {
 	      // For PID code:
 	      is_moving = (Logical)(left_speed != 0 || right_speed != 0);
 	      if (is_moving) {
-		leftPID.TargetTicksPerFrame = left_speed;
-		rightPID.TargetTicksPerFrame = right_speed;
+		left_motor_encoder.target_ticks_per_frame_set(left_speed);
+		right_motor_encoder.target_ticks_per_frame_set(-right_speed);
 	      } else {
 	        motor_speeds_set(0, 0);
 	      }
@@ -487,20 +440,24 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'u': {
 	      // Update PID constants ("U Kp Kd Ki Ko");
-	      Kp = arguments[0];
-	      Kd = arguments[1];
-	      Ki = arguments[2];
-	      Ko = arguments[3];
+	      left_motor_encoder.proportional_set(arguments[0]);
+	      left_motor_encoder.derivative_set(arguments[1]);
+	      left_motor_encoder.integral_set(arguments[2]);
+	      left_motor_encoder.denominator_set(arguments[3]);
+	      right_motor_encoder.proportional_set(arguments[0]);
+	      right_motor_encoder.derivative_set(arguments[1]);
+	      right_motor_encoder.integral_set(arguments[2]);
+	      right_motor_encoder.denominator_set(arguments[3]);
 	      host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
-	      debug_uart->integer_print(Kp);
+	      debug_uart->integer_print(left_motor_encoder.proportional_get());
 	      host_uart->string_print((Text)" ");
-	      debug_uart->integer_print(Kd);
+	      debug_uart->integer_print(left_motor_encoder.derivative_get());
 	      host_uart->string_print((Text)" ");
-	      debug_uart->integer_print(Ki);
+	      debug_uart->integer_print(left_motor_encoder.integral_get());
 	      host_uart->string_print((Text)" ");
-	      debug_uart->integer_print(Ko);
+	      debug_uart->integer_print(left_motor_encoder.denominator_get());
 
 	      // Print the usual "OK" result:
 	      host_uart->string_print((Text)"OK\r\n");

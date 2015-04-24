@@ -6,8 +6,9 @@
 #ifndef BUS_SERVER_H_INCLUDED
 #define BUS_SERVER_H_INCLUDED 1
 
-#include "Bus_Slave.h"
-#include "Frame_Buffer.h"
+#include <Bus_Slave.h>
+#include <Frame_Buffer.h>
+#include <Bus_Motor_Encoder.h>
 
 #define TEST_BUS_OUTPUT 1
 #define TEST_BUS_ECHO 2
@@ -31,32 +32,11 @@ extern AVR_UART *debug_uart;
 extern AVR_UART *host_uart;
 extern Bus_Slave bus_slave;
 
-typedef struct {
-  Double TargetTicksPerFrame;	// target speed in ticks per frame
-  Integer Encoder;		// encoder count
-  Integer PrevEnc;		// last encoder count
-
-  // Using previous input (PrevInput) instead of PrevError to avoid derivative kick,
-  // see http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-derivative-kick/
-  Short PrevInput;		// last input
-
-  // Using integrated term (ITerm) instead of integrated error (Ierror),
-  // to allow tuning changes,
-  // see http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-tuning-changes/
-
-  Short ITerm;			//integrated term
-
-  Integer output;		// last motor setting
-} SetPointInfo;
-
-extern SetPointInfo leftPID, rightPID;
-
 // Set the *LED* to the value of *led*:
+extern void motor_speeds_set(Byte left_speed, Byte right_speed);
 extern void led_set(Logical led);
 extern void led_blink(UShort on, UShort off);
-extern void motor_speeds_set(Byte left_speed, Byte right_speed);
-extern void pid_reset(SetPointInfo *pid);
-extern void do_pid(SetPointInfo *pid);
+extern void do_pid(Bus_Motor_Encoder *pid);
 extern void pid_update();
 extern void bridge_host_to_bus();
 extern void bridge_setup(UByte test);
