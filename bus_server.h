@@ -14,7 +14,8 @@
 #define TEST_BUS_ECHO 2
 #define TEST_BUS_COMMAND 3
 #define TEST_BUS_BRIDGE 4
-#define TEST_BUS_LINE 5
+#define TEST_RAB_FREYA 5	// RAB == ROS Arduino Bridge
+#define TEST_RAB_LOKI 6
 
 // Pin defintions for bus_beaglebone:
 #define BUS_STANDBY       3
@@ -31,6 +32,16 @@ extern AVR_UART *bus_uart;
 extern AVR_UART *debug_uart;
 extern AVR_UART *host_uart;
 extern Bus_Slave bus_slave;
+
+class Protocol {
+  virtual void baud_rate() = 0;
+  virtual void motors_speed_set(Short left_speed, Short right_speed);
+  virtual void pid_parameter_set(Short proportional,
+    Short integral, Short derivative, Short denominator) = 0;
+  virtual Integer left_encoder_get() = 0;
+  virtual Integer right_encoder_get() = 0;
+  virtual Integer encoders_reset();
+};
 
 // Set the *LED* to the value of *led*:
 extern void motor_speeds_set(Byte left_speed, Byte right_speed);

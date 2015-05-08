@@ -5,11 +5,6 @@
 #include "Frame_Buffer.h"
 #include "bus_server.h"
 
-#define TEST_BUS_OUTPUT 1
-#define TEST_BUS_ECHO 2
-#define TEST_BUS_COMMAND 3
-#define TEST_BUS_BRIDGE 4
-#define TEST_BUS_LINE 5
 
 // ROS Arduino Bridge requires no echo but if running from terminal the echo can be nice
 #define ECHO_SERIAL_INPUT	0
@@ -307,7 +302,8 @@ void bridge_setup(UByte test) {
       host_uart->interrupt_set((Logical)1);
       bus_uart->interrupt_set((Logical)1);
       break;
-    case TEST_BUS_LINE:
+    case TEST_RAB_FREYA:
+    case TEST_RAB_LOKI:
       // No announce because we are talking to *host_uart*:
       host_uart->interrupt_set((Logical)1);
       bus_uart->interrupt_set((Logical)1);
@@ -318,7 +314,8 @@ void bridge_setup(UByte test) {
 
 void bridge_loop(UByte test) {
   switch (test) {
-    case TEST_BUS_LINE: {
+    case TEST_RAB_FREYA:
+    case TEST_RAB_LOKI: {
       // Some constants:
       static const UInteger PID_RATE = 5;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
