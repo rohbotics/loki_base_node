@@ -11,12 +11,21 @@
 #define TEST_BUS_BRIDGE 4
 #define TEST_BUS_LINE 5
 
+// ROS Arduino Bridge requires no echo but if running from terminal the echo can be nice
+#define ECHO_SERIAL_INPUT	0
+
+// If we want to reverse raw encoder polarity it can be done here
+#define ENCODER_RIGHT_POLARITY   (1)
+#define ENCODER_LEFT_POLARITY    (1)
+
 // The *Bus_Slave* object is defined here:
 NULL_UART null_uart;
 AVR_UART *bus_uart = &avr_uart1;
 AVR_UART *debug_uart = &avr_uart0;
 AVR_UART *host_uart = &avr_uart0;
 Bus_Slave bus_slave((UART *)bus_uart, (UART *)host_uart);
+
+
 
 // The two PID set points are defined here:
 Bus_Motor_Encoder left_motor_encoder, right_motor_encoder;
@@ -57,8 +66,10 @@ void pid_update() {
 
   if (is_moving) {
     // Read the encoders:
-    left_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 2));
-    right_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 4));
+    left_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 2) *
+        ENCODER_LEFT_POLARITY);
+    right_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 4) *
+        ENCODER_RIGHT_POLARITY);
   
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"+");
@@ -332,8 +343,10 @@ void bridge_loop(UByte test) {
 	// Grab the next character since we have it:
 	Character character = (Character)host_uart->frame_get();
 
-	// Echo the input:
-	host_uart->frame_put((UShort)character);
+	// Echo the input:  (for terminal but DON'T use for ROS Arduino Bridge
+	if (ECHO_SERIAL_INPUT) {
+		host_uart->frame_put((UShort)character);
+	}
 	if (character == '\r') {
 	  host_uart->frame_put((UShort)'\n');
 	}
@@ -383,8 +396,10 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'e': {
 	      // Read encoders ("e"):
-	      Integer encoder0 = bus_slave.command_integer_get(address, 2);
-	      Integer encoder1 = bus_slave.command_integer_get(address, 4);
+	      Integer encoder0 = bus_slave.command_integer_get(address, 2) *
+		ENCODER_RIGHT_POLARITY;
+	      Integer encoder1 = bus_slave.command_integer_get(address, 4) *
+		ENCODER_LEFT_POLARITY;
 
 	      host_uart->integer_print(encoder0);
 	      host_uart->string_print((Text)" ");
