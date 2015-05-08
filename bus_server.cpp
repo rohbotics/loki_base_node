@@ -319,11 +319,12 @@ void bridge_loop(UByte test) {
       // Some constants:
       static const UInteger PID_RATE = 5;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
+      static const UInteger MAXIMUM_ARGUMENTS = 4;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
 
       // Some variables that need to be unchanged through each loop iteration:
       static UByte address = 33;
-      static Integer arguments[4];
+      static Integer arguments[MAXIMUM_ARGUMENTS];
       static UByte arguments_index = 0;
       static Character command = ' ';
       static Logical have_number = (Logical)0;
@@ -342,10 +343,10 @@ void bridge_loop(UByte test) {
 
 	// Echo the input:  (for terminal but DON'T use for ROS Arduino Bridge
 	if (ECHO_SERIAL_INPUT) {
-		host_uart->frame_put((UShort)character);
-	}
-	if (character == '\r') {
-	  host_uart->frame_put((UShort)'\n');
+	  host_uart->frame_put((UShort)character);
+	  if (character == '\r') {
+	    host_uart->frame_put((UShort)'\n');
+	  }
 	}
 
 	// Parse *number* one *character* at a time:
@@ -393,11 +394,20 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'e': {
 	      // Read encoders ("e"):
-	      Integer encoder0 = bus_slave.command_integer_get(address, 2) *
-		ENCODER_RIGHT_POLARITY;
-	      Integer encoder1 = bus_slave.command_integer_get(address, 4) *
-		ENCODER_LEFT_POLARITY;
+	      Integer encoder0 = 0;
+	      Integer encoder1 = 0;
 
+	      switch (test) {
+	        case TEST_RAB_FREYA: {
+		  encoder0 = bus_slave.command_integer_get(address, 2) *
+		    ENCODER_RIGHT_POLARITY;
+	          encoder1 = bus_slave.command_integer_get(address, 4) *
+		    ENCODER_LEFT_POLARITY;
+		  break;
+		}
+              }
+
+	      // Send the results back:
 	      host_uart->integer_print(encoder0);
 	      host_uart->string_print((Text)" ");
 	      host_uart->integer_print(encoder1);
@@ -430,11 +440,16 @@ void bridge_loop(UByte test) {
 
 	      // For PID code:
 	      is_moving = (Logical)(left_speed != 0 || right_speed != 0);
-	      if (is_moving) {
-		left_motor_encoder.target_ticks_per_frame_set(left_speed);
-		right_motor_encoder.target_ticks_per_frame_set(-right_speed);
-	      } else {
-	        motor_speeds_set(0, 0);
+	      switch (test) {
+	        case TEST_RAB_FREYA: {
+	          if (is_moving) {
+		    left_motor_encoder.target_ticks_per_frame_set(left_speed);
+		    right_motor_encoder.target_ticks_per_frame_set(-right_speed);
+	          } else {
+	            motor_speeds_set(0, 0);
+	          }
+		  break;
+		}
 	      }
 
 	      // Print the usual "OK" result:
@@ -443,8 +458,13 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'r': {
 	      // Reset encoders ("r"):
-	      bus_slave.command_integer_put(address, 3, 0);
-	      bus_slave.command_integer_put(address, 5, 0);
+	      switch (test) {
+	        case TEST_RAB_FREYA: {
+		  bus_slave.command_integer_put(address, 3, 0);
+	          bus_slave.command_integer_put(address, 5, 0);
+	          break;
+	        }
+	      }
 
 	      // Print the usual "OK" result:
 	      host_uart->string_print((Text)"OK\r\n");
