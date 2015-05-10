@@ -55,19 +55,34 @@ void motor_speeds_set(Byte left_speed, Byte right_speed) {
     bus_slave.flush();
 }
 
-void pid_update() {
+void pid_update(UByte mode) {
+  //debug_uart->string_print((Text)"[");
   static Byte last_left_speed = 0x80;
   static Byte last_right_speed = 0x80;
 
   if (is_moving) {
     // Read the encoders:
-    left_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 2) *
-        ENCODER_LEFT_POLARITY);
-    right_motor_encoder.encoder_set(bus_slave.command_integer_get(address, 4) *
-        ENCODER_RIGHT_POLARITY);
+    //debug_uart->string_print((Text)"a");
+    Integer left_encoder = 0;
+    Integer right_encoder = 0;
+    switch (mode) {
+      case TEST_RAB_FREYA: {
+	left_encoder =
+	  bus_slave.command_integer_get(address, 2) * ENCODER_LEFT_POLARITY;
+	right_encoder =
+	  bus_slave.command_integer_get(address, 4) * ENCODER_RIGHT_POLARITY;
+	break;
+      }
+      case TEST_RAB_LOKI: {
+	// Do something here:
+	break;
+      }
+    }
+    left_motor_encoder.encoder_set(left_encoder);
+    right_motor_encoder.encoder_set(right_encoder);
   
     // Do the PID for each motor:
-    //debug_uart->string_print((Text)"+");
+    //debug_uart->string_print((Text)"b");
     right_motor_encoder.do_pid();
     left_motor_encoder.do_pid();
 
@@ -78,20 +93,43 @@ void pid_update() {
     //debug_uart->integer_print((UInteger)right_motor_encoder.output);
     //debug_uart->string_print((Text)"\r\n");
 
+    //debug_uart->string_print((Text)"c");
     Byte left_speed = (Byte)left_motor_encoder.output_get();
     Byte right_speed = (Byte)right_motor_encoder.output_get();
 
+    //debug_uart->string_print((Text)"d");
     if (left_speed != last_left_speed) {
-        bus_slave.command_byte_put(address,  9, left_speed);
-	bus_slave.flush();
-	last_left_speed = left_speed;
+      switch (mode) {
+	case TEST_RAB_FREYA: {
+	  bus_slave.command_byte_put(address,  9, left_speed);
+	  bus_slave.flush();
+	  break;
+	}
+	case TEST_RAB_LOKI: {
+	  // Do something here:
+	  break;
+	}
+      }
+      last_left_speed = left_speed;
     } 
+
+    //debug_uart->string_print((Text)"e");
     if (right_speed != last_right_speed) {
-	bus_slave.command_byte_put(address, 11, right_speed);
-	bus_slave.flush();
-	last_right_speed = right_speed;
+      switch (mode) {
+        case TEST_RAB_FREYA: {
+	  bus_slave.command_byte_put(address, 11, right_speed);
+	  bus_slave.flush();
+	  break;
+	}
+        case TEST_RAB_LOKI: {
+	  // Do somthing here:
+	  break;
+        }
+      }
+      last_right_speed = right_speed;
     }
 
+    //debug_uart->string_print((Text)"f");
     is_moving = (Logical)(left_speed != 0) || (right_speed != 0);
 
     //motor_speeds_set((Byte)left_motor_encoder.output, (Byte)right_motor_encoder.output);
@@ -104,11 +142,13 @@ void pid_update() {
     // PrevInput is considered a good proxy to detect
     // whether reset has already happened
 
+    //debug_uart->string_print((Text)"g");
     if (!left_motor_encoder.is_reset() || !right_motor_encoder.is_reset()) {
       left_motor_encoder.reset();
       right_motor_encoder.reset();
     }
   }
+  //debug_uart->string_print((Text)"]");
 }
 
 void bridge_host_to_bus() {
@@ -312,8 +352,8 @@ void bridge_setup(UByte test) {
   }
 }
 
-void bridge_loop(UByte test) {
-  switch (test) {
+void bridge_loop(UByte mode) {
+  switch (mode) {
     case TEST_RAB_FREYA:
     case TEST_RAB_LOKI: {
       // Some constants:
@@ -385,6 +425,7 @@ void bridge_loop(UByte test) {
 
 	// Execute a command if we get '\r':
 	if (character == '\r') {
+	  //host_uart->string_print((Text)"<");
 	  // Dispatch on *command* character:
 	  switch (command) {
 	    case 'b': {
@@ -397,12 +438,16 @@ void bridge_loop(UByte test) {
 	      Integer encoder0 = 0;
 	      Integer encoder1 = 0;
 
-	      switch (test) {
+	      switch (mode) {
 	        case TEST_RAB_FREYA: {
 		  encoder0 = bus_slave.command_integer_get(address, 2) *
 		    ENCODER_RIGHT_POLARITY;
 	          encoder1 = bus_slave.command_integer_get(address, 4) *
 		    ENCODER_LEFT_POLARITY;
+		  break;
+		}
+		case TEST_RAB_LOKI: {
+		  // Do somthing here:
 		  break;
 		}
               }
@@ -440,11 +485,12 @@ void bridge_loop(UByte test) {
 
 	      // For PID code:
 	      is_moving = (Logical)(left_speed != 0 || right_speed != 0);
-	      switch (test) {
+	      switch (mode) {
 	        case TEST_RAB_FREYA: {
 	          if (is_moving) {
 		    left_motor_encoder.target_ticks_per_frame_set(left_speed);
-		    right_motor_encoder.target_ticks_per_frame_set(-right_speed);
+		    right_motor_encoder.
+		      target_ticks_per_frame_set(-right_speed);
 	          } else {
 	            motor_speeds_set(0, 0);
 	          }
@@ -458,7 +504,7 @@ void bridge_loop(UByte test) {
 	    }
 	    case 'r': {
 	      // Reset encoders ("r"):
-	      switch (test) {
+	      switch (mode) {
 	        case TEST_RAB_FREYA: {
 		  bus_slave.command_integer_put(address, 3, 0);
 	          bus_slave.command_integer_put(address, 5, 0);
@@ -490,6 +536,7 @@ void bridge_loop(UByte test) {
 	      debug_uart->integer_print(left_motor_encoder.integral_get());
 	      host_uart->string_print((Text)" ");
 	      debug_uart->integer_print(left_motor_encoder.denominator_get());
+	      host_uart->string_print((Text)"\r\n");
 
 	      // Print the usual "OK" result:
 	      host_uart->string_print((Text)"OK\r\n");
@@ -504,13 +551,13 @@ void bridge_loop(UByte test) {
 
 	  // Reset the *arguments_index* for the next command:
 	  arguments_index = 0;
+	  //host_uart->string_print((Text)">\r\n");
 	}
       }
 
       // Do we need to do a PID update cycle?:
       if (now > next_pid) {
-	//debug_uart->string_print((Text)"+");
-	pid_update();
+	pid_update(mode);
         next_pid += PID_INTERVAL;
       }
 

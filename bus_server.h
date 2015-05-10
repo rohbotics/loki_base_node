@@ -48,7 +48,7 @@ extern void motor_speeds_set(Byte left_speed, Byte right_speed);
 extern void led_set(Logical led);
 extern void led_blink(UShort on, UShort off);
 extern void do_pid(Bus_Motor_Encoder *pid);
-extern void pid_update();
+extern void pid_update(UByte mode);
 extern void bridge_host_to_bus();
 extern void bridge_setup(UByte test);
 extern void bridge_loop(UByte test);
