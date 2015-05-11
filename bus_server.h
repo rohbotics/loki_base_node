@@ -27,11 +27,11 @@
 #define BUFFER_SIZE 16
 
 // The *Bus* object is defined here:
-extern NULL_UART null_uart;
-extern AVR_UART *bus_uart;
-extern AVR_UART *debug_uart;
-extern AVR_UART *host_uart;
-extern Bus_Slave bus_slave;
+//extern NULL_UART null_uart;
+//extern AVR_UART *bus_uart;
+//extern AVR_UART *debug_uart;
+//extern AVR_UART *host_uart;
+//extern Bus_Slave bus_slave;
 
 class Protocol {
   virtual void baud_rate() = 0;
@@ -45,12 +45,15 @@ class Protocol {
 
 class Bridge {
   public:
-    Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart);
+    Bridge(AVR_UART *host_uart,
+      AVR_UART *bus_uart, AVR_UART *debug_uart, Bus_Slave *bus_slave);
     void pid_update(UByte mode);
     void host_to_bus();
     void setup(UByte mode);
     void loop(UByte mode);
+    void motor_speeds_set(Short left_speed, Short right_speed);
   private:
+    Bus_Slave *_bus_slave;
     AVR_UART *_bus_uart;
     AVR_UART *_debug_uart;
     AVR_UART *_host_uart;
