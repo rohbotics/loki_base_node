@@ -30,8 +30,6 @@ void led_blink(UShort on, UShort off) {
   }
 }
 
-static UByte address = 33;
-
 // *Bridge* methods:
 
 Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
@@ -54,23 +52,14 @@ void Bridge::pid_update(UByte mode) {
   if (_is_moving) {
     // Read the encoders:
     //_debug_uart->string_print((Text)"a");
-    Integer left_encoder = 0;
-    Integer right_encoder = 0;
-    switch (mode) {
-      case TEST_RAB_FREYA: {
-	left_encoder =
-	  _bus_slave->command_integer_get(address, 2) * ENCODER_LEFT_POLARITY;
-	right_encoder =
-	  _bus_slave->command_integer_get(address, 4) * ENCODER_RIGHT_POLARITY;
-	break;
-      }
-      case TEST_RAB_LOKI: {
-	// Do something here:
-	break;
-      }
-    }
-    _left_motor_encoder->encoder_set(left_encoder);
-    _right_motor_encoder->encoder_set(right_encoder);
+    Integer left_encoder =
+     _left_motor_encoder->encoder_get() * ENCODER_LEFT_POLARITY;
+    Integer right_encoder =
+     _right_motor_encoder->encoder_get() * ENCODER_RIGHT_POLARITY;
+
+    // Load the encoder values into the encoder porition (this API is silly):
+    _left_motor_encoder->encoder__set(left_encoder);
+    _right_motor_encoder->encoder__set(right_encoder);
   
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
@@ -90,33 +79,13 @@ void Bridge::pid_update(UByte mode) {
 
     //_debug_uart->string_print((Text)"d");
     if (left_speed != last_left_speed) {
-      switch (mode) {
-	case TEST_RAB_FREYA: {
-	  _bus_slave->command_byte_put(address,  9, left_speed);
-	  _bus_slave->flush();
-	  break;
-	}
-	case TEST_RAB_LOKI: {
-	  // Do something here:
-	  break;
-	}
-      }
+      _left_motor_encoder->pwm_set(left_speed);
       last_left_speed = left_speed;
     } 
 
     //_debug_uart->string_print((Text)"e");
     if (right_speed != last_right_speed) {
-      switch (mode) {
-        case TEST_RAB_FREYA: {
-	  _bus_slave->command_byte_put(address, 11, right_speed);
-	  _bus_slave->flush();
-	  break;
-	}
-        case TEST_RAB_LOKI: {
-	  // Do somthing here:
-	  break;
-        }
-      }
+      _right_motor_encoder->pwm_set(right_speed);
       last_right_speed = right_speed;
     }
 
@@ -270,10 +239,8 @@ void Bridge::host_to_bus() {
 }
 
 void Bridge::motor_speeds_set(Short left_speed, Short right_speed) {
-  _bus_slave->command_byte_put(address, 9, left_speed);
-  _bus_slave->flush();
-  _bus_slave->command_byte_put(address, 11, right_speed);
-  _bus_slave->flush();
+  _left_motor_encoder->pwm_set((Byte)left_speed);
+  _right_motor_encoder->pwm_set((Byte)right_speed);
 }
 
 void Bridge::setup(UByte test) {
@@ -362,7 +329,6 @@ void Bridge::loop(UByte mode) {
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
 
       // Some variables that need to be unchanged through each loop iteration:
-      static UByte address = 33;
       static Integer arguments[MAXIMUM_ARGUMENTS];
       static UByte arguments_index = 0;
       static Character command = ' ';
@@ -434,27 +400,15 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'e': {
 	      // Read encoders ("e"):
-	      Integer encoder0 = 0;
-	      Integer encoder1 = 0;
-
-	      switch (mode) {
-	        case TEST_RAB_FREYA: {
-		  encoder0 = _bus_slave->command_integer_get(address, 2) *
-		    ENCODER_RIGHT_POLARITY;
-	          encoder1 = _bus_slave->command_integer_get(address, 4) *
-		    ENCODER_LEFT_POLARITY;
-		  break;
-		}
-		case TEST_RAB_LOKI: {
-		  // Do somthing here:
-		  break;
-		}
-              }
+	      Integer left_encoder = _left_motor_encoder->encoder_get() *
+	       ENCODER_RIGHT_POLARITY;
+	      Integer right_encoder = _right_motor_encoder->encoder_get() *
+	       ENCODER_LEFT_POLARITY;
 
 	      // Send the results back:
-	      _host_uart->integer_print(encoder0);
+	      _host_uart->integer_print(left_encoder);
 	      _host_uart->string_print((Text)" ");
-	      _host_uart->integer_print(encoder1);
+	      _host_uart->integer_print(right_encoder);
 	      _host_uart->string_print((Text)"\r\n");
 	      break;
 	    }
@@ -463,38 +417,14 @@ void Bridge::loop(UByte mode) {
 	      Integer left_speed = arguments[0];
 	      Integer right_speed = arguments[1];
 	      
-	      //bus.command_byte_put(address, 9, left_speed);
-	      //Byte xleft_speed = bus.command_byte_get(address, 8);
-	      //bus.command_byte_put(address, 11, right_speed);
-	      //Byte xright_speed = bus.command_byte_get(address, 10);
-
-	      //motor_speeds_set(left_speed, right_speed);
-	      //last_motor_command_time = now;
-
-	      // For debugging:
-	      //debug_uart->integer_print((Integer)left_speed);
-	      //debug_uart->string_print((Text)"==");
-	      //debug_uart->integer_print((Integer)xleft_speed);
-	      //debug_uart->string_print((Text)" ");
-
-	      //debug_uart->integer_print((Integer)right_speed);
-	      //debug_uart->string_print((Text)"==");
-	      //debug_uart->integer_print((Integer)xright_speed);
-	      //debug_uart->string_print((Text)" ");
-
 	      // For PID code:
 	      _is_moving = (Logical)(left_speed != 0 || right_speed != 0);
-	      switch (mode) {
-	        case TEST_RAB_FREYA: {
-	          if (_is_moving) {
-		    _left_motor_encoder->target_ticks_per_frame_set(left_speed);
-		    _right_motor_encoder->
-		      target_ticks_per_frame_set(-right_speed);
-	          } else {
-		    motor_speeds_set(0, 0);
-	          }
-		  break;
-		}
+	      if (_is_moving) {
+		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
+		_right_motor_encoder->
+		  target_ticks_per_frame_set(-right_speed);
+	      } else {
+		motor_speeds_set(0, 0);
 	      }
 
 	      // Print the usual "OK" result:
@@ -503,13 +433,8 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'r': {
 	      // Reset encoders ("r"):
-	      switch (mode) {
-	        case TEST_RAB_FREYA: {
-		  _bus_slave->command_integer_put(address, 3, 0);
-	          _bus_slave->command_integer_put(address, 5, 0);
-	          break;
-	        }
-	      }
+	      _left_motor_encoder->encoder_set(0);
+	      _right_motor_encoder->encoder_set(0);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
