@@ -45,8 +45,9 @@ class Protocol {
 
 class Bridge {
   public:
-    Bridge(AVR_UART *host_uart,
-      AVR_UART *bus_uart, AVR_UART *debug_uart, Bus_Slave *bus_slave);
+    Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
+     Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
+     Bus_Motor_Encoder *right_motor_encoder);
     void pid_update(UByte mode);
     void host_to_bus();
     void setup(UByte mode);
@@ -58,6 +59,8 @@ class Bridge {
     AVR_UART *_debug_uart;
     AVR_UART *_host_uart;
     Logical _is_moving;
+    Bus_Motor_Encoder *_left_motor_encoder;
+    Bus_Motor_Encoder *_right_motor_encoder;
 };
 
 // Set the *LED* to the value of *led*:

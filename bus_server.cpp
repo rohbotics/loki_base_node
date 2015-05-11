@@ -1,5 +1,4 @@
 // Copyright (c) 2014-2015 by Wayne C. Gramlich.  All rights reserved.
-//
 
 #include "Bus_Slave.h"
 #include "Frame_Buffer.h"
@@ -12,20 +11,6 @@
 // If we want to reverse raw encoder polarity it can be done here
 #define ENCODER_RIGHT_POLARITY   (1)
 #define ENCODER_LEFT_POLARITY    (1)
-
-// The *Bus_Slave* object is defined here:
-
-// Define the UART's:
-//static NULL_UART null_uart;
-//static AVR_UART *bus_uart = &avr_uart1;
-//static AVR_UART *debug_uart = &avr_uart0;
-//static AVR_UART *host_uart = &avr_uart0;
-
-//Bus_Slave bus__slave((UART *)bus_uart, (UART *)host_uart);
-
-// The two PID set points are defined here:
-Bus_Motor_Encoder left_motor_encoder, right_motor_encoder;
-
 
 // Set the *LED* to the value of *led*:
 void led_set(Logical led) {
@@ -49,8 +34,11 @@ static UByte address = 33;
 
 // *Bridge* methods:
 
-Bridge::Bridge(AVR_UART *host_uart,
- AVR_UART *bus_uart, AVR_UART *debug_uart, Bus_Slave *bus_slave) {
+Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
+  Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
+  Bus_Motor_Encoder *right_motor_encoder) {
+  _left_motor_encoder = left_motor_encoder;
+  _right_motor_encoder = right_motor_encoder;
   _bus_slave = bus_slave;
   _host_uart = host_uart;
   _bus_uart = bus_uart;
@@ -81,13 +69,13 @@ void Bridge::pid_update(UByte mode) {
 	break;
       }
     }
-    left_motor_encoder.encoder_set(left_encoder);
-    right_motor_encoder.encoder_set(right_encoder);
+    _left_motor_encoder->encoder_set(left_encoder);
+    _right_motor_encoder->encoder_set(right_encoder);
   
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
-    right_motor_encoder.do_pid();
-    left_motor_encoder.do_pid();
+    _right_motor_encoder->do_pid();
+    _left_motor_encoder->do_pid();
 
     /* Set the motor speeds accordingly */
     //_debug_uart->string_print((Text)" l=");
@@ -97,8 +85,8 @@ void Bridge::pid_update(UByte mode) {
     //_debug_uart->string_print((Text)"\r\n");
 
     //_debug_uart->string_print((Text)"c");
-    Byte left_speed = (Byte)left_motor_encoder.output_get();
-    Byte right_speed = (Byte)right_motor_encoder.output_get();
+    Byte left_speed = (Byte)_left_motor_encoder->output_get();
+    Byte right_speed = (Byte)_right_motor_encoder->output_get();
 
     //_debug_uart->string_print((Text)"d");
     if (left_speed != last_left_speed) {
@@ -146,9 +134,9 @@ void Bridge::pid_update(UByte mode) {
     // whether reset has already happened
 
     //_debug_uart->string_print((Text)"g");
-    if (!left_motor_encoder.is_reset() || !right_motor_encoder.is_reset()) {
-      left_motor_encoder.reset();
-      right_motor_encoder.reset();
+    if (!_left_motor_encoder->is_reset() || !_right_motor_encoder->is_reset()) {
+      _left_motor_encoder->reset();
+      _right_motor_encoder->reset();
     }
   }
   //_debug_uart->string_print((Text)"]");
@@ -499,8 +487,8 @@ void Bridge::loop(UByte mode) {
 	      switch (mode) {
 	        case TEST_RAB_FREYA: {
 	          if (_is_moving) {
-		    left_motor_encoder.target_ticks_per_frame_set(left_speed);
-		    right_motor_encoder.
+		    _left_motor_encoder->target_ticks_per_frame_set(left_speed);
+		    _right_motor_encoder->
 		      target_ticks_per_frame_set(-right_speed);
 	          } else {
 		    motor_speeds_set(0, 0);
@@ -529,24 +517,26 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'u': {
 	      // Update PID constants ("U Kp Kd Ki Ko");
-	      left_motor_encoder.proportional_set(arguments[0]);
-	      left_motor_encoder.derivative_set(arguments[1]);
-	      left_motor_encoder.integral_set(arguments[2]);
-	      left_motor_encoder.denominator_set(arguments[3]);
-	      right_motor_encoder.proportional_set(arguments[0]);
-	      right_motor_encoder.derivative_set(arguments[1]);
-	      right_motor_encoder.integral_set(arguments[2]);
-	      right_motor_encoder.denominator_set(arguments[3]);
+	      _left_motor_encoder->proportional_set(arguments[0]);
+	      _left_motor_encoder->derivative_set(arguments[1]);
+	      _left_motor_encoder->integral_set(arguments[2]);
+	      _left_motor_encoder->denominator_set(arguments[3]);
+	      _right_motor_encoder->proportional_set(arguments[0]);
+	      _right_motor_encoder->derivative_set(arguments[1]);
+	      _right_motor_encoder->integral_set(arguments[2]);
+	      _right_motor_encoder->denominator_set(arguments[3]);
 	      _host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
-	      _debug_uart->integer_print(left_motor_encoder.proportional_get());
+	      _debug_uart->integer_print(
+	        _left_motor_encoder->proportional_get());
 	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(left_motor_encoder.derivative_get());
+	      _debug_uart->integer_print(_left_motor_encoder->derivative_get());
 	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(left_motor_encoder.integral_get());
+	      _debug_uart->integer_print(_left_motor_encoder->integral_get());
 	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(left_motor_encoder.denominator_get());
+	      _debug_uart->integer_print(
+	       _left_motor_encoder->denominator_get());
 	      _host_uart->string_print((Text)"\r\n");
 
 	      // Print the usual "OK" result:
