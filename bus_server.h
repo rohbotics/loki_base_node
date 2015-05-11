@@ -43,6 +43,20 @@ class Protocol {
   virtual Integer encoders_reset();
 };
 
+class Bridge {
+  public:
+    Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart);
+    void pid_update(UByte mode);
+    void host_to_bus();
+    void setup(UByte mode);
+    void loop(UByte mode);
+  private:
+    AVR_UART *_bus_uart;
+    AVR_UART *_debug_uart;
+    AVR_UART *_host_uart;
+    Logical _is_moving;
+};
+
 // Set the *LED* to the value of *led*:
 extern void motor_speeds_set(Byte left_speed, Byte right_speed);
 extern void led_set(Logical led);
