@@ -6,29 +6,11 @@
 
 
 // ROS Arduino Bridge requires no echo but if running from terminal the echo can be nice
-#define ECHO_SERIAL_INPUT	0
+#define ECHO_SERIAL_INPUT	1
 
 // If we want to reverse raw encoder polarity it can be done here
 #define ENCODER_RIGHT_POLARITY   (1)
 #define ENCODER_LEFT_POLARITY    (1)
-
-// Set the *LED* to the value of *led*:
-void led_set(Logical led) {
-  if (led) {
-    digitalWrite(LED, HIGH);
-  } else {
-    digitalWrite(LED, LOW);
-  }
-}
-
-void led_blink(UShort on, UShort off) {
-  while (1) {
-    led_set((Logical)1);
-    delay(on);
-    led_set((Logical)0);
-    delay(off);
-  }
-}
 
 // *Bridge* methods:
 
@@ -120,9 +102,9 @@ void Bridge::host_to_bus() {
   Frame_Buffer			host_frame_in;
   Frame_Buffer			host_frame_out;
 
-  led_set((Logical)1);
-  delay(200);
-  led_set((Logical)0);
+  //led_set((Logical)1);
+  //delay(200);
+  //led_set((Logical)0);
 
   // Just keep looping:
   while (1) {
@@ -170,7 +152,7 @@ void Bridge::host_to_bus() {
 	  // Since we are the master, the 9th bit should never
 	  // be set.  We indicate our confusion by setting the
 	  // *led* high and masking off the 9th bit:
-	  led_blink(200, 800);
+	  //led_blink(200, 800);
 	}
 
 	// Send *frame* up to host:
@@ -184,7 +166,7 @@ void Bridge::host_to_bus() {
 	if (echo_suppress != frame) {
 	  // Since this should never happen, we indicate our
 	  // confusion by setting *led* to high:
-	  led_blink(500, 500);
+	  //led_blink(500, 500);
 	}
 
 	// Now clear *echo_suppress*:
@@ -215,12 +197,12 @@ void Bridge::host_to_bus() {
 	    break;
 	  case 6:
 	    // Reserved:
-	    led_set((Logical)0);
-	    digitalWrite(LED, LOW);
+	    //led_set((Logical)0);
+	    //digitalWrite(LED, LOW);
 	    break;
 	  case 7:
 	    // Reserved:
-	    led_set((Logical)1);
+	    //led_set((Logical)1);
 	    break;
 	}
       } else {
@@ -261,16 +243,14 @@ void Bridge::setup(UByte test) {
   //avr_uart0.string_print((Character *)"\r\n");
 
   // Turn the *LED* on:
-  pinMode(LED, OUTPUT);
-  digitalWrite(LED, HIGH);
+  //pinMode(LED, OUTPUT);
+  //digitalWrite(LED, HIGH);
 
   // Initalize *avr_uart1* to talk to the bus:
   _bus_uart->begin(16000000L, 500000L, (Character *)"9N1");
 
   // Force the standby pin on the CAN transeciever to *LOW* to force it
   // into active mode:
-  pinMode(BUS_STANDBY, OUTPUT);
-  digitalWrite(BUS_STANDBY, LOW);
 
   // For debugging, dump out UART1 configuration registers:
   //avr_uart0.string_print((Character *)" A:");
@@ -500,18 +480,19 @@ void Bridge::loop(UByte mode) {
     case TEST_BUS_COMMAND: {
       // Blink the *LED* some:
 
+      // This code is kind of old...
+
       // Set the *LED* to *HIGH* and then wait a little:
-      _bus_slave->command_ubyte_put(ADDRESS, LED_PUT, HIGH);
-      Logical led_get = _bus_slave->command_ubyte_get(ADDRESS, LED_GET);
-      led_set(led_get);
-      delay(100);
+      //_bus_slave->command_ubyte_put(ADDRESS, LED_PUT, HIGH);
+      //Logical led_get = _bus_slave->command_ubyte_get(ADDRESS, LED_GET);
+      //led_set(led_get);
+      //delay(100);
 
       // Set the *LED* to *LOW* and then wait a little:
-      _bus_slave->command_ubyte_put(ADDRESS, LED_PUT, LOW);
-      led_get = _bus_slave->command_ubyte_get(ADDRESS, LED_GET);
-      led_set(led_get);
-      delay(100);
-
+      //_bus_slave->command_ubyte_put(ADDRESS, LED_PUT, LOW);
+      //led_get = _bus_slave->command_ubyte_get(ADDRESS, LED_GET);
+      //led_set(led_get);
+      //delay(100);
       break;
     }
     case TEST_BUS_ECHO: {
@@ -548,11 +529,11 @@ void Bridge::loop(UByte mode) {
       }
 
       // Let's blink the LED for a little:
-      led_set((remote_frame & 1) == 0);
-      delay(100);
+      //led_set((remote_frame & 1) == 0);
+      //delay(100);
 
-      led_set((remote_frame & 1) != 0);
-      delay(100);
+      //led_set((remote_frame & 1) != 0);
+      //delay(100);
 
       break;
     }
@@ -563,7 +544,7 @@ void Bridge::loop(UByte mode) {
       // baud rates.  We also ensure that the bus is terminated and the
       // CAN bus transceiver is on.
 
-      UShort delay_milliseconds = 10;
+      //UShort delay_milliseconds = 10;
 
       // *character* is a static variable:
       static Character character = 'U';
@@ -577,8 +558,8 @@ void Bridge::loop(UByte mode) {
       _bus_slave->frame_put((UShort)character);
 
       // Set LED to be the same as the LSB of *frame*:
-      led_set((character & 1) != 0);
-      delay(delay_milliseconds);
+      //led_set((character & 1) != 0);
+      //delay(delay_milliseconds);
 
       // Output *frame* back to user for debugging:
       _debug_uart->frame_put((UShort)character);
@@ -603,8 +584,8 @@ void Bridge::loop(UByte mode) {
       }
 
       // Set LED to be the opposite of the *frame* LSB:
-      led_set((character & 1) == 0);
-      delay(delay_milliseconds);
+      //led_set((character & 1) == 0);
+      //delay(delay_milliseconds);
 
       break;
     }

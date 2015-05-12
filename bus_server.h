@@ -17,22 +17,6 @@
 #define TEST_RAB_FREYA 5	// RAB == ROS Arduino Bridge
 #define TEST_RAB_LOKI 6
 
-// Pin defintions for bus_beaglebone:
-#define BUS_STANDBY       3
-#define LED		 13
-
-#define ADDRESS 0x21
-#define LED_GET 0
-#define LED_PUT 1
-#define BUFFER_SIZE 16
-
-// The *Bus* object is defined here:
-//extern NULL_UART null_uart;
-//extern AVR_UART *bus_uart;
-//extern AVR_UART *debug_uart;
-//extern AVR_UART *host_uart;
-//extern Bus_Slave bus_slave;
-
 class Protocol {
   virtual void baud_rate() = 0;
   virtual void motors_speed_set(Short left_speed, Short right_speed);
@@ -62,15 +46,4 @@ class Bridge {
     Bus_Motor_Encoder *_left_motor_encoder;
     Bus_Motor_Encoder *_right_motor_encoder;
 };
-
-// Set the *LED* to the value of *led*:
-extern void motor_speeds_set(Byte left_speed, Byte right_speed);
-extern void led_set(Logical led);
-extern void led_blink(UShort on, UShort off);
-extern void do_pid(Bus_Motor_Encoder *pid);
-extern void pid_update(UByte mode);
-extern void bridge_host_to_bus();
-extern void bridge_setup(UByte test);
-extern void bridge_loop(UByte test);
-
 #endif // BUS_SERVER_H_INCLUDED
