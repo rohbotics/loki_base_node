@@ -6,7 +6,7 @@
 
 
 // ROS Arduino Bridge requires no echo but if running from terminal the echo can be nice
-#define ECHO_SERIAL_INPUT	1
+#define ECHO_SERIAL_INPUT	0
 
 // If we want to reverse raw encoder polarity it can be done here
 #define ENCODER_RIGHT_POLARITY   (1)
@@ -30,6 +30,7 @@ void Bridge::pid_update(UByte mode) {
   //_debug_uart->string_print((Text)"[");
   static Byte last_left_speed = 0x80;
   static Byte last_right_speed = 0x80;
+  //static Integer previous_left_encoder = 0;
 
   if (_is_moving) {
     // Read the encoders:
@@ -58,6 +59,15 @@ void Bridge::pid_update(UByte mode) {
     //_debug_uart->string_print((Text)"c");
     Byte left_speed = (Byte)_left_motor_encoder->output_get();
     Byte right_speed = (Byte)_right_motor_encoder->output_get();
+
+    //_debug_uart->print((Text)"ls=");
+    //_debug_uart->integer_print((Integer)left_speed);
+    //_debug_uart->print((Text)" le=");
+    //_debug_uart->integer_print(left_encoder);
+    //_debug_uart->print((Text)" ple=");
+    //_debug_uart->integer_print(previous_left_encoder);
+    //_debug_uart->print((Text)"\r\n");
+    //previous_left_encoder = left_encoder;
 
     //_debug_uart->string_print((Text)"d");
     if (left_speed != last_left_speed) {
@@ -293,7 +303,8 @@ void Bridge::setup(UByte test) {
       // No announce because we are talking to *host_uart*:
       _host_uart->interrupt_set((Logical)1);
       _bus_uart->interrupt_set((Logical)1);
-      _host_uart->string_print((Character *)"\r\nros_ard_bridge_protocol:\r\n");
+      //_host_uart->string_print(
+      //  (Character *)"\r\nros_ard_bridge_protocol:\r\n");
       break;
   }
 }
@@ -401,8 +412,7 @@ void Bridge::loop(UByte mode) {
 	      _is_moving = (Logical)(left_speed != 0 || right_speed != 0);
 	      if (_is_moving) {
 		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
-		_right_motor_encoder->
-		  target_ticks_per_frame_set(-right_speed);
+		_right_motor_encoder->target_ticks_per_frame_set(right_speed);
 	      } else {
 		motor_speeds_set(0, 0);
 	      }
@@ -443,6 +453,19 @@ void Bridge::loop(UByte mode) {
 	      _debug_uart->integer_print(
 	       _left_motor_encoder->denominator_get());
 	      _host_uart->string_print((Text)"\r\n");
+
+	      // Print the usual "OK" result:
+	      _host_uart->string_print((Text)"OK\r\n");
+	      break;
+	    }
+	    case 'x': {
+	      // Set motor speeds ("m left, right"):
+	      Integer left_speed = arguments[0];
+	      Integer right_speed = arguments[1];
+	      
+	      // For PID code:
+	      _left_motor_encoder->pwm_set(left_speed);
+	      _right_motor_encoder->pwm_set(right_speed);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
