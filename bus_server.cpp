@@ -458,8 +458,8 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 	      break;
 	    }
-	    case 'x': {
-	      // Set motor speeds ("m left, right"):
+	    case 'z': {
+	      // Set motor speeds ("z left right"):
 	      Integer left_speed = arguments[0];
 	      Integer right_speed = arguments[1];
 	      
