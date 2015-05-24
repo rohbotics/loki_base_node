@@ -12,6 +12,14 @@
 #define ENCODER_RIGHT_POLARITY   (1)
 #define ENCODER_LEFT_POLARITY    (1)
 
+#define PID_OVERRIDE_FACTOR 	 (15)   // If > 0 we revert to direct pwm setting when Kp = 0
+#define PID_OVERRIDE_OFFSET      (30)   // An offset to add AFTER scaling to PID values
+
+
+// Trigger and readback delay from an HC-SR04 Ulrasonic Sonar, return in meters
+extern float usonar_inlineReadMeters(int sonarNumber);
+extern int   usonar_getLastDistInMm(int sonarUnit);
+
 // *Bridge* methods:
 
 Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
@@ -46,8 +54,16 @@ void Bridge::pid_update(UByte mode) {
   
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
-    _right_motor_encoder->do_pid();
-    _left_motor_encoder->do_pid();
+
+    if ((PID_OVERRIDE_FACTOR > 0) &&
+        // Do normal 'm' command unless Kp are zero, then do direct pwm set
+        (_left_motor_encoder->proportional_get() == 0) && 
+        (_right_motor_encoder->proportional_get() == 0))  {
+        // bypass PID code if Kp are all zero
+    } else {
+        _right_motor_encoder->do_pid();
+        _left_motor_encoder->do_pid();
+    } 
 
     /* Set the motor speeds accordingly */
     //_debug_uart->string_print((Text)" l=");
@@ -413,12 +429,59 @@ void Bridge::loop(UByte mode) {
 	      if (_is_moving) {
 		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
 		_right_motor_encoder->target_ticks_per_frame_set(right_speed);
+
+                if ((PID_OVERRIDE_FACTOR > 0)  &&
+                // Do normal 'm' command unless Kp are zero, then do direct pwm set
+	           (_left_motor_encoder->proportional_get()  == 0) && 
+	           (_right_motor_encoder->proportional_get() == 0))  {
+	            // bypass PID code if Kp are all zero and scale pwm based on 10 as top speed
+                    int motLeftSpeed;
+                    int motRightSpeed;
+                    if (left_speed > 0) {
+                      motLeftSpeed = (left_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
+                      if (motLeftSpeed > 126)  motLeftSpeed = 126;
+                    } else {
+                      motLeftSpeed = (left_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
+                      if (motLeftSpeed < -126)  motLeftSpeed = -126;
+                    }
+                    if (right_speed > 0) {
+                      motRightSpeed = (right_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
+                      if (motRightSpeed > 126)  motRightSpeed = 126;
+                    } else {
+                      motRightSpeed = (right_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
+                      if (motRightSpeed < -126)  motRightSpeed = -126;
+                    }
+	            _left_motor_encoder->pwm_set(motLeftSpeed);
+	            _right_motor_encoder->pwm_set(motRightSpeed);
+                 }
 	      } else {
 		motor_speeds_set(0, 0);
 	      }
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
+	      break;
+	    }
+	    case 'o': {
+	      // Read object sensor requested  ("o 5"): 
+	      Integer sonarNumber = arguments[0];
+
+              // If sonar number is 0 read a bunch of them in units of cm
+              if (sonarNumber == 0) {
+                int distInMm;
+                for (int unit = 1; unit <= 16 ; unit++) {
+                  distInMm = usonar_getLastDistInMm(unit);
+	          _host_uart->integer_print((int)distInMm);
+	          _host_uart->string_print((Text)" ");
+                }
+	        _host_uart->string_print((Text)"\r\n");
+              } else {
+                // Read sensor on Loki platform
+                float frontClearanceMm = usonar_inlineReadMeters(sonarNumber) * 1000.0;
+	        _host_uart->integer_print((int)frontClearanceMm);
+	        _host_uart->string_print((Text)"\r\n");
+              }
+
 	      break;
 	    }
 	    case 'r': {
