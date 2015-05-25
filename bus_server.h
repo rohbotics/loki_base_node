@@ -17,6 +17,18 @@
 #define TEST_RAB_FREYA 5	// RAB == ROS Arduino Bridge
 #define TEST_RAB_LOKI 6
 
+// Setup control for debug printouts that we can manage live
+// Binary bits in a flag word default is to act like code of May 2015
+#define DBG_FLAG_MOTOR_SETTINGS     0x0001   // Show values going to motor controllers
+#define DBG_FLAG_USENSOR_SCANS      0x0008   // Show all ultrasonic sensor values at end of each pass
+#define DBG_FLAG_ECHO_INPUT_CHARS   0x0010   // Echo input for manual ease of use
+#define DBG_FLAG_PARAMETER_SETUP    0x0100   // Showing info as we set general parameters 
+#define DBG_FLAG_UART_SETUP         0x0200   // Showing info for registers of uart
+
+// We have a system global debug flag made up of above bits.  Access uses these calls
+extern int   system_debug_flags_get();
+extern void  system_debug_flags_set(int flags);
+
 class Protocol {
   virtual void baud_rate() = 0;
   virtual void motors_speed_set(Short left_speed, Short right_speed);

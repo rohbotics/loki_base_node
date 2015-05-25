@@ -5,9 +5,6 @@
 #include "bus_server.h"
 
 
-// ROS Arduino Bridge requires no echo but if running from terminal the echo can be nice
-#define ECHO_SERIAL_INPUT	0
-
 // If we want to reverse raw encoder polarity it can be done here
 #define ENCODER_RIGHT_POLARITY   (1)
 #define ENCODER_LEFT_POLARITY    (1)
@@ -256,17 +253,19 @@ void Bridge::setup(UByte test) {
   _host_uart->begin(16000000L, 115200L, (Character *)"8N1");
 
   // For debugging, dump out UART0 configuration registers:
-  //avr_uart0.string_print((Character *)" A:");
-  //avr_uart0.uinteger_print((UInteger)UCSR0A);
-  //avr_uart0.string_print((Character *)" B:");
-  //avr_uart0.uinteger_print((UInteger)UCSR0B);
-  //avr_uart0.string_print((Character *)" C:");
-  //avr_uart0.uinteger_print((UInteger)UCSR0C);
-  //avr_uart0.string_print((Character *)" H:");
-  //avr_uart0.uinteger_print((UInteger)UBRR0H);
-  //avr_uart0.string_print((Character *)" L:");
-  //avr_uart0.uinteger_print((UInteger)UBRR0L);
-  //avr_uart0.string_print((Character *)"\r\n");
+  if (system_debug_flags_get() & DBG_FLAG_UART_SETUP) {
+    avr_uart0.string_print((Character *)" A:");
+    avr_uart0.uinteger_print((UInteger)UCSR0A);
+    avr_uart0.string_print((Character *)" B:");
+    avr_uart0.uinteger_print((UInteger)UCSR0B);
+    avr_uart0.string_print((Character *)" C:");
+    avr_uart0.uinteger_print((UInteger)UCSR0C);
+    avr_uart0.string_print((Character *)" H:");
+    avr_uart0.uinteger_print((UInteger)UBRR0H);
+    avr_uart0.string_print((Character *)" L:");
+    avr_uart0.uinteger_print((UInteger)UBRR0L);
+    avr_uart0.string_print((Character *)"\r\n");
+  }
 
   // Turn the *LED* on:
   //pinMode(LED, OUTPUT);
@@ -354,7 +353,7 @@ void Bridge::loop(UByte mode) {
 	Character character = (Character)_host_uart->frame_get();
 
 	// Echo the input:  (for terminal but DON'T use for ROS Arduino Bridge
-	if (ECHO_SERIAL_INPUT) {
+        if (system_debug_flags_get() & DBG_FLAG_ECHO_INPUT_CHARS) {
 	  _host_uart->frame_put((UShort)character);
 	  if (character == '\r') {
 	    _host_uart->frame_put((UShort)'\n');
@@ -506,16 +505,29 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
-	      _debug_uart->integer_print(
+              if (system_debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
+	        _debug_uart->integer_print(
 	        _left_motor_encoder->proportional_get());
-	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(_left_motor_encoder->derivative_get());
-	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(_left_motor_encoder->integral_get());
-	      _host_uart->string_print((Text)" ");
-	      _debug_uart->integer_print(
-	       _left_motor_encoder->denominator_get());
-	      _host_uart->string_print((Text)"\r\n");
+	        _host_uart->string_print((Text)" ");
+	        _debug_uart->integer_print(_left_motor_encoder->derivative_get());
+	        _host_uart->string_print((Text)" ");
+	        _debug_uart->integer_print(_left_motor_encoder->integral_get());
+	        _host_uart->string_print((Text)" ");
+	        _debug_uart->integer_print(
+	         _left_motor_encoder->denominator_get());
+	        _host_uart->string_print((Text)"\r\n");
+              }
+
+	      // Print the usual "OK" result:
+	      _host_uart->string_print((Text)"OK\r\n");
+	      break;
+	    }
+	    case 'v': {
+              // Set verbosity of debug messages  ("v 5"):
+	      Integer debug_flags = arguments[0];
+
+              // set the bits in the system wide debug flags
+              system_debug_flags_set(debug_flags);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
@@ -535,7 +547,7 @@ void Bridge::loop(UByte mode) {
 	      break;
 	    }
 	    default: {
-	      _host_uart->string_print((Text)"Invalid Command\r\n");
+	      _host_uart->string_print((Text)"Invalid Command!\r\n");
 	      break;
 	    }
 	  }
