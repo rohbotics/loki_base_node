@@ -14,7 +14,7 @@
 
 
 // Trigger and readback delay from an HC-SR04 Ulrasonic Sonar, return in meters
-extern float usonar_inlineReadMeters(int sonarNumber);
+extern float usonar_inlineReadMeters(int sonarUnit);
 extern int   usonar_getLastDistInMm(int sonarUnit);
 
 // *Bridge* methods:
@@ -463,10 +463,10 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'p': {
 	      // Read object sensor requested  ("o 5"): 
-	      Integer sonarNumber = arguments[0];
+	      Integer sonarUnit = arguments[0];
 
               // If sonar number is 0 read a bunch of them in units of cm
-              if (sonarNumber == 0) {
+              if (sonarUnit == 0) {
                 int distInMm;
                 for (int unit = 1; unit <= 16 ; unit++) {
                   distInMm = usonar_getLastDistInMm(unit);
@@ -475,11 +475,24 @@ void Bridge::loop(UByte mode) {
                 }
 	        _host_uart->string_print((Text)"\r\n");
               } else {
-                // Read sensor on Loki platform
-                float frontClearanceMm = usonar_inlineReadMeters(sonarNumber) * 1000.0;
-	        _host_uart->integer_print((int)frontClearanceMm);
+                // Read sensor on Loki platform from cached measurements
+                float clearanceMm = usonar_getLastDistInMm(sonarUnit);
+	        _host_uart->integer_print((int)clearanceMm);
 	        _host_uart->string_print((Text)"\r\n");
               }
+
+	      break;
+	    }
+	    case 'o': {      // read a sensor directly inline
+              // ROS reading of 'pins' or sensors.  ("o 3"):
+              // We will return ultrasonic sensor readings for one unit 
+              // from the background sampled array of data measured earlier
+	      Integer sonarUnit = arguments[0];
+
+              // Read sensor on Loki platform
+              float clearanceMm = usonar_inlineReadMeters(sonarUnit) * 1000.0;
+	      _host_uart->integer_print((int)clearanceMm);
+	      _host_uart->string_print((Text)"\r\n");
 
 	      break;
 	    }
