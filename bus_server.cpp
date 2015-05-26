@@ -461,7 +461,7 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 	      break;
 	    }
-	    case 'o': {
+	    case 'p': {
 	      // Read object sensor requested  ("o 5"): 
 	      Integer sonarNumber = arguments[0];
 
