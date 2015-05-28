@@ -20,8 +20,9 @@
 // Setup control for debug printouts that we can manage live
 // Binary bits in a flag word default is to act like code of May 2015
 #define DBG_FLAG_MOTOR_SETTINGS     0x0001   // Show values going to motor controllers
-#define DBG_FLAG_USENSOR_RESULTS    0x0008   // Show all ultrasonic sensor values at end of each pass
+#define DBG_FLAG_USENSOR_ERR_DEBUG  0x0002   // Show error counters every so often
 #define DBG_FLAG_USENSOR_DEBUG      0x0004   // Show ultrasonic sensor acquision debug info
+#define DBG_FLAG_USENSOR_RESULTS    0x0008   // Show all ultrasonic sensor values at end of each pass
 #define DBG_FLAG_ECHO_INPUT_CHARS   0x0010   // Echo input for manual ease of use
 #define DBG_FLAG_PARAMETER_SETUP    0x0100   // Showing info as we set general parameters 
 #define DBG_FLAG_UART_SETUP         0x0200   // Showing info for registers of uart
