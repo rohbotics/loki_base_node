@@ -16,15 +16,15 @@ The single-letter commands over the serial port are used for polling sensors, co
 
 
 <pre>
-Command Name   Cmd  Parms      Description
-GET_BAUDRATE   'b'             Return baud rate (often used as a quick test or ping)
-READ_ENCODERS  'e'             Return the current reading of the two wheel encoders
-MOTOR_SPEEDS   'm <L> <R>'     Set motor speeds for left and right to be controlled by PID
-PING           'p <S>'         Read one sonar sensor starting with sensor 1.  0 returns all.
-RESET_ENCODERS 'r'             Reset encoder values both to 0
-UPDATE_PID     'u Kp Kd Ki Ko' Update PID parameters with 
-VERBOSE_DEBUG  'v <F>'         Set single bit flags to enable assorted debug modes 
-MOTOR_DIRECT   'z <L> <R>'     Set motor speeds for left and right directly -126 to +126
+Command Name   Cmd  Parms     Description
+GET_BAUDRATE    b             Return baud rate (often used as a quick test or ping)
+READ_ENCODERS   e             Return the current reading of the two wheel encoders
+MOTOR_SPEEDS    m L R         Set motor speeds for left and right to be controlled by PID
+PING            p S           Read one sonar sensor starting with sensor 1.  0 returns all.
+RESET_ENCODERS  r             Reset encoder values both to 0
+UPDATE_PID      u Kp Kd Ki Ko Update PID parameters with 
+VERBOSE_DEBUG   v F           Set single bit flags to enable assorted debug modes 
+MOTOR_DIRECT    z L R         Set motor speeds for left and right directly -126 to +126
 
 Note: Commands of   a,c,d,s,t,w, and x are NOT supported in this firmware
 </pre>
