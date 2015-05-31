@@ -9,7 +9,7 @@
 #define ENCODER_RIGHT_POLARITY   (1)
 #define ENCODER_LEFT_POLARITY    (1)
 
-#define PID_OVERRIDE_FACTOR 	 (15)   // If > 0 we revert to direct pwm setting when Kp = 0
+#define PID_OVERRIDE_FACTOR 	 (15)   // Factor used if in PID override mode
 #define PID_OVERRIDE_OFFSET      (30)   // An offset to add AFTER scaling to PID values
 
 
@@ -52,12 +52,15 @@ void Bridge::pid_update(UByte mode) {
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
 
-    if ((PID_OVERRIDE_FACTOR > 0) &&
+    if ((system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
         // Do normal 'm' command unless Kp are zero, then do direct pwm set
         (_left_motor_encoder->proportional_get() == 0) && 
         (_right_motor_encoder->proportional_get() == 0))  {
         // bypass PID code if Kp are all zero
     } else {
+        if (system_debug_flags_get() & DBG_FLAG_PID_DEBUG) {
+          _host_uart->string_print((Text)"P\r\n");
+        }
         _right_motor_encoder->do_pid();
         _left_motor_encoder->do_pid();
     } 
@@ -329,7 +332,7 @@ void Bridge::loop(UByte mode) {
     case TEST_RAB_FREYA:
     case TEST_RAB_LOKI: {
       // Some constants:
-      static const UInteger PID_RATE = 5;			// Hz.
+      static const UInteger PID_RATE = 25;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
       static const UInteger MAXIMUM_ARGUMENTS = 4;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
@@ -429,7 +432,7 @@ void Bridge::loop(UByte mode) {
 		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
 		_right_motor_encoder->target_ticks_per_frame_set(right_speed);
 
-                if ((PID_OVERRIDE_FACTOR > 0)  &&
+                if ((system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
                 // Do normal 'm' command unless Kp are zero, then do direct pwm set
 	           (_left_motor_encoder->proportional_get()  == 0) && 
 	           (_right_motor_encoder->proportional_get() == 0))  {
@@ -506,28 +509,32 @@ void Bridge::loop(UByte mode) {
 	      break;
 	    }
 	    case 'u': {
-	      // Update PID constants ("U Kp Kd Ki Ko");
+	      // Update PID constants ("U Kp Kd Ki Ci Ko");
 	      _left_motor_encoder->proportional_set(arguments[0]);
 	      _left_motor_encoder->derivative_set(arguments[1]);
 	      _left_motor_encoder->integral_set(arguments[2]);
-	      _left_motor_encoder->denominator_set(arguments[3]);
+	      _left_motor_encoder->integral_cap_set(arguments[3]);
+	      _left_motor_encoder->denominator_set(arguments[4]);
 	      _right_motor_encoder->proportional_set(arguments[0]);
 	      _right_motor_encoder->derivative_set(arguments[1]);
 	      _right_motor_encoder->integral_set(arguments[2]);
-	      _right_motor_encoder->denominator_set(arguments[3]);
+	      _right_motor_encoder->integral_cap_set(arguments[3]);
+	      _right_motor_encoder->denominator_set(arguments[4]);
 	      _host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
               if (system_debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
+	        _host_uart->string_print((Text)"Kp ");
 	        _debug_uart->integer_print(
 	        _left_motor_encoder->proportional_get());
-	        _host_uart->string_print((Text)" ");
+	        _host_uart->string_print((Text)"  Kd ");
 	        _debug_uart->integer_print(_left_motor_encoder->derivative_get());
-	        _host_uart->string_print((Text)" ");
+	        _host_uart->string_print((Text)"  Ki ");
 	        _debug_uart->integer_print(_left_motor_encoder->integral_get());
-	        _host_uart->string_print((Text)" ");
-	        _debug_uart->integer_print(
-	         _left_motor_encoder->denominator_get());
+	        _host_uart->string_print((Text)"  Ci ");
+	        _debug_uart->integer_print(_left_motor_encoder->integral_cap_get());
+	        _host_uart->string_print((Text)"  Do ");
+	        _debug_uart->integer_print( _left_motor_encoder->denominator_get());
 	        _host_uart->string_print((Text)"\r\n");
               }
 
@@ -551,6 +558,18 @@ void Bridge::loop(UByte mode) {
 	      Integer left_speed = arguments[0];
 	      Integer right_speed = arguments[1];
 	      
+              // Cap values to range of 8-bit signed value or we get confusing rollover
+              if (left_speed > 127) {
+                left_speed = 127;
+              } else if (left_speed < -127) {
+                left_speed = -127;
+              }
+              if (right_speed > 127) {
+                right_speed = 127;
+              } else if (right_speed < -127) {
+                right_speed = -127;
+              }
+
 	      // For PID code:
 	      _left_motor_encoder->pwm_set(left_speed);
 	      _right_motor_encoder->pwm_set(right_speed);
