@@ -3,6 +3,7 @@
 #include "Bus_Slave.h"
 #include "Frame_Buffer.h"
 #include "bus_server.h"
+#include "RAB_Sonar.h"
 
 
 // If we want to reverse raw encoder polarity it can be done here
@@ -13,15 +14,12 @@
 #define PID_OVERRIDE_OFFSET      (30)   // An offset to add AFTER scaling to PID values
 
 
-// Trigger and readback delay from an HC-SR04 Ulrasonic Sonar, return in meters
-extern float usonar_inlineReadMeters(int sonarUnit);
-extern int   usonar_getLastDistInMm(int sonarUnit);
-
 // *Bridge* methods:
 
 Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
   Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
-  Bus_Motor_Encoder *right_motor_encoder) {
+  Bus_Motor_Encoder *right_motor_encoder, RAB_Sonar *rab_sonar) {
+  // FIXME: These should all have a trailing underscore, not a preceeding one:
   _left_motor_encoder = left_motor_encoder;
   _right_motor_encoder = right_motor_encoder;
   _bus_slave = bus_slave;
@@ -29,6 +27,7 @@ Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
   _bus_uart = bus_uart;
   _debug_uart = debug_uart;
   _is_moving = (Logical)0;
+  rab_sonar_ = rab_sonar;
 }
 
 void Bridge::pid_update(UByte mode) {
@@ -52,13 +51,13 @@ void Bridge::pid_update(UByte mode) {
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
 
-    if ((system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
+    if ((rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
         // Do normal 'm' command unless Kp are zero, then do direct pwm set
         (_left_motor_encoder->proportional_get() == 0) && 
         (_right_motor_encoder->proportional_get() == 0))  {
         // bypass PID code if Kp are all zero
     } else {
-        if (system_debug_flags_get() & DBG_FLAG_PID_DEBUG) {
+        if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DEBUG) {
           _host_uart->string_print((Text)"P\r\n");
         }
         _right_motor_encoder->do_pid();
@@ -256,7 +255,7 @@ void Bridge::setup(UByte test) {
   _host_uart->begin(16000000L, 115200L, (Character *)"8N1");
 
   // For debugging, dump out UART0 configuration registers:
-  if (system_debug_flags_get() & DBG_FLAG_UART_SETUP) {
+  if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_UART_SETUP) {
     avr_uart0.string_print((Character *)" A:");
     avr_uart0.uinteger_print((UInteger)UCSR0A);
     avr_uart0.string_print((Character *)" B:");
@@ -334,7 +333,7 @@ void Bridge::loop(UByte mode) {
       // Some constants:
       static const UInteger PID_RATE = 25;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
-      static const UInteger MAXIMUM_ARGUMENTS = 4;
+      static const UInteger MAXIMUM_ARGUMENTS = 5;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
 
       // Some variables that need to be unchanged through each loop iteration:
@@ -356,7 +355,7 @@ void Bridge::loop(UByte mode) {
 	Character character = (Character)_host_uart->frame_get();
 
 	// Echo the input:  (for terminal but DON'T use for ROS Arduino Bridge
-        if (system_debug_flags_get() & DBG_FLAG_ECHO_INPUT_CHARS) {
+        if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_ECHO_INPUT_CHARS) {
 	  _host_uart->frame_put((UShort)character);
 	  if (character == '\r') {
 	    _host_uart->frame_put((UShort)'\n');
@@ -432,7 +431,7 @@ void Bridge::loop(UByte mode) {
 		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
 		_right_motor_encoder->target_ticks_per_frame_set(right_speed);
 
-                if ((system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
+                if ((rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
                 // Do normal 'm' command unless Kp are zero, then do direct pwm set
 	           (_left_motor_encoder->proportional_get()  == 0) && 
 	           (_right_motor_encoder->proportional_get() == 0))  {
@@ -469,17 +468,17 @@ void Bridge::loop(UByte mode) {
 	      Integer sonarUnit = arguments[0];
 
               // If sonar number is 0 read a bunch of them in units of cm
-              int distInCm;
               if (sonarUnit == 0) {
-                for (int unit = 1; unit <= 16 ; unit++) {
-                  distInCm = (int)((usonar_getLastDistInMm(unit)/(float)(10.0)) + (float)(0.5));
+		UByte sonars_count = rab_sonar_->sonars_count_get();
+                for (UByte unit = 1; unit <= sonars_count ; unit++) {
+                  Short distInCm = rab_sonar_->ping_get(unit);
 	          _host_uart->integer_print((int)distInCm);
 	          _host_uart->string_print((Text)" ");
                 }
 	        _host_uart->string_print((Text)"\r\n");
               } else {
                 // Read sensor on Loki platform from cached measurements
-                distInCm = (int)((usonar_getLastDistInMm(sonarUnit)/(float)(10.0)) + (float)(0.5));
+                Short distInCm = rab_sonar_->ping_get(sonarUnit);
 	        _host_uart->integer_print((int)distInCm);
 	        _host_uart->string_print((Text)"\r\n");
               }
@@ -490,10 +489,10 @@ void Bridge::loop(UByte mode) {
               // ROS reading of 'pins' or sensors.  ("o 3"):
               // We will return ultrasonic sensor readings for one unit 
               // from the background sampled array of data measured earlier
-	      Integer sonarUnit = arguments[0];
+	      UByte sonarUnit = (UByte)arguments[0];
 
               // Read sensor on Loki platform
-              float distInMm = usonar_inlineReadMeters(sonarUnit) * 1000.0;
+              Short distInMm = rab_sonar_->ping_get(sonarUnit);
 	      _host_uart->integer_print((int)distInMm);
 	      _host_uart->string_print((Text)" mm\r\n");
 
@@ -523,7 +522,7 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
-              if (system_debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
+              if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
 	        _host_uart->string_print((Text)"Kp ");
 	        _debug_uart->integer_print(
 	        _left_motor_encoder->proportional_get());
@@ -547,7 +546,7 @@ void Bridge::loop(UByte mode) {
 	      Integer debug_flags = arguments[0];
 
               // set the bits in the system wide debug flags
-              system_debug_flags_set(debug_flags);
+              rab_sonar_->system_debug_flags_set(debug_flags);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");

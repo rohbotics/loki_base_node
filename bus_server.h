@@ -9,6 +9,7 @@
 #include <Bus_Slave.h>
 #include <Frame_Buffer.h>
 #include <Bus_Motor_Encoder.h>
+#include <RAB_Sonar.h>
 
 #define TEST_BUS_OUTPUT 1
 #define TEST_BUS_ECHO 2
@@ -29,10 +30,6 @@
 #define DBG_FLAG_PARAMETER_SETUP    0x0100   // Showing info as we set general parameters 
 #define DBG_FLAG_UART_SETUP         0x0200   // Showing info for registers of uart
 
-// We have a system global debug flag made up of above bits.  Access uses these calls
-extern int   system_debug_flags_get();
-extern void  system_debug_flags_set(int flags);
-
 class Protocol {
   virtual void baud_rate() = 0;
   virtual void motors_speed_set(Short left_speed, Short right_speed);
@@ -47,7 +44,7 @@ class Bridge {
   public:
     Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
      Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
-     Bus_Motor_Encoder *right_motor_encoder);
+     Bus_Motor_Encoder *right_motor_encoder, RAB_Sonar *rab_sonar);
     void pid_update(UByte mode);
     void host_to_bus();
     void setup(UByte mode);
@@ -61,5 +58,7 @@ class Bridge {
     Logical _is_moving;
     Bus_Motor_Encoder *_left_motor_encoder;
     Bus_Motor_Encoder *_right_motor_encoder;
+    RAB_Sonar *rab_sonar_;
 };
 #endif // BUS_SERVER_H_INCLUDED
+
