@@ -420,24 +420,6 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"\r\n");
 	      break;
 	    }
-	    case 'f': {
-	      // Read encoders ("f"):
-	      UByte address = 40;
-	      UByte left_command = 2;
-	      Integer left_encoder =
-		_bus_slave->command_integer_get(address, left_command);
-
-	      UByte right_command = 4;
-	      Integer right_encoder =
-		_bus_slave->command_integer_get(address, right_command);
-
-	      // Send the results back:
-	      _host_uart->integer_print(left_encoder);
-	      _host_uart->string_print((Text)" ");
-	      _host_uart->integer_print(right_encoder);
-	      _host_uart->string_print((Text)"\r\n");
-	      break;
-	    }
 	    case 'm': {
 	      // Set motor speeds ("m left, right"):
 	      Integer left_speed = arguments[0];
@@ -482,7 +464,7 @@ void Bridge::loop(UByte mode) {
 	      break;
 	    }
 	    case 'p': {
-	      // Read object sensor requested  ("o 5"): 
+	      // Read (ping) sonar requested  ("p 5"): 
 	      Integer sonarUnit = arguments[0];
 
               // If sonar number is 0 read a bunch of them in units of cm
