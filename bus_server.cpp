@@ -420,6 +420,24 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"\r\n");
 	      break;
 	    }
+	    case 'f': {
+	      // Read encoders ("f"):
+	      UByte address = 40;
+	      UByte left_command = 2;
+	      Integer left_encoder =
+		_bus_slave->command_integer_get(address, left_command);
+
+	      UByte right_command = 4;
+	      Integer right_encoder =
+		_bus_slave->command_integer_get(address, right_command);
+
+	      // Send the results back:
+	      _host_uart->integer_print(left_encoder);
+	      _host_uart->string_print((Text)" ");
+	      _host_uart->integer_print(right_encoder);
+	      _host_uart->string_print((Text)"\r\n");
+	      break;
+	    }
 	    case 'm': {
 	      // Set motor speeds ("m left, right"):
 	      Integer left_speed = arguments[0];
@@ -471,15 +489,15 @@ void Bridge::loop(UByte mode) {
               if (sonarUnit == 0) {
 		UByte sonars_count = rab_sonar_->sonars_count_get();
                 for (UByte unit = 1; unit <= sonars_count ; unit++) {
-                  Short distInCm = rab_sonar_->ping_get(unit);
-	          _host_uart->integer_print((int)distInCm);
+                  UShort distance = rab_sonar_->ping_get(unit - 1);
+	          _host_uart->integer_print((Integer)distance);
 	          _host_uart->string_print((Text)" ");
                 }
 	        _host_uart->string_print((Text)"\r\n");
               } else {
                 // Read sensor on Loki platform from cached measurements
-                Short distInCm = rab_sonar_->ping_get(sonarUnit);
-	        _host_uart->integer_print((int)distInCm);
+                UShort distance = rab_sonar_->ping_get(sonarUnit - 1);
+	        _host_uart->integer_print((Integer)distance);
 	        _host_uart->string_print((Text)"\r\n");
               }
 
