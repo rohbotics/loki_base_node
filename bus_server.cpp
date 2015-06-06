@@ -471,14 +471,14 @@ void Bridge::loop(UByte mode) {
               if (sonarUnit == 0) {
 		UByte sonars_count = rab_sonar_->sonars_count_get();
                 for (UByte unit = 1; unit <= sonars_count ; unit++) {
-                  UShort distance = rab_sonar_->ping_get(unit - 1);
+                  UShort distance = rab_sonar_->ping_get(unit);
 	          _host_uart->integer_print((Integer)distance);
 	          _host_uart->string_print((Text)" ");
                 }
 	        _host_uart->string_print((Text)"\r\n");
               } else {
                 // Read sensor on Loki platform from cached measurements
-                UShort distance = rab_sonar_->ping_get(sonarUnit - 1);
+                UShort distance = rab_sonar_->ping_get(sonarUnit);
 	        _host_uart->integer_print((Integer)distance);
 	        _host_uart->string_print((Text)"\r\n");
               }
