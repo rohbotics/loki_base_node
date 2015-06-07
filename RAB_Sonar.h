@@ -13,9 +13,9 @@
 class RAB_Sonar {
  public:
   RAB_Sonar(UART *debug_uart);
-  virtual Short ping_get(UByte sonar) = 0;
-  virtual Short system_debug_flags_get() = 0;
-  virtual void system_debug_flags_set(Short system_flags) = 0;
+  virtual UShort ping_get(UByte sonar) = 0;
+  virtual UShort debug_flags_get() = 0;
+  virtual void debug_flags_set(UShort debug_flags) = 0;
   virtual UByte sonars_count_get() = 0;
  protected:
   UART *debug_uart_;

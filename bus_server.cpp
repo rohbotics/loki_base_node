@@ -1,5 +1,8 @@
 // Copyright (c) 2014-2015 by Wayne C. Gramlich.  All rights reserved.
 
+// http://brettbeauregard.com/blog/2011/04/
+//  improving-the-beginner%E2%80%99s-pid-initialization/
+
 #include "Bus_Slave.h"
 #include "Frame_Buffer.h"
 #include "bus_server.h"
@@ -11,7 +14,7 @@
 #define ENCODER_LEFT_POLARITY    (1)
 
 #define PID_OVERRIDE_FACTOR 	 (15)   // Factor used if in PID override mode
-#define PID_OVERRIDE_OFFSET      (30)   // An offset to add AFTER scaling to PID values
+#define PID_OVERRIDE_OFFSET      (30)   // Offset to add AFTER PID scaling
 
 
 // *Bridge* methods:
@@ -51,13 +54,13 @@ void Bridge::pid_update(UByte mode) {
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
 
-    if ((rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
+    if ((rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
         // Do normal 'm' command unless Kp are zero, then do direct pwm set
         (_left_motor_encoder->proportional_get() == 0) && 
         (_right_motor_encoder->proportional_get() == 0))  {
         // bypass PID code if Kp are all zero
     } else {
-        if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DEBUG) {
+        if (rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DEBUG) {
           _host_uart->string_print((Text)"P\r\n");
         }
         _right_motor_encoder->do_pid();
@@ -99,13 +102,13 @@ void Bridge::pid_update(UByte mode) {
     //_debug_uart->string_print((Text)"f");
     _is_moving = (Logical)(left_speed != 0) || (right_speed != 0);
 
-    //motor_speeds_set((Byte)left_motor_encoder.output, (Byte)right_motor_encoder.output);
+    //motor_speeds_set((Byte)left_motor_encoder.output,
+    // (Byte)right_motor_encoder.output);
   } else {
     //_debug_uart->string_print((Text)"-");
 
     // If we're not moving there is nothing more to do:
     // Reset PIDs once, to prevent startup spikes, see
-    //    http://brettbeauregard.com/blog/2011/04/improving-the-beginner%E2%80%99s-pid-initialization/
     // PrevInput is considered a good proxy to detect
     // whether reset has already happened
 
@@ -255,7 +258,7 @@ void Bridge::setup(UByte test) {
   _host_uart->begin(16000000L, 115200L, (Character *)"8N1");
 
   // For debugging, dump out UART0 configuration registers:
-  if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_UART_SETUP) {
+  if (rab_sonar_->debug_flags_get() & DBG_FLAG_UART_SETUP) {
     avr_uart0.string_print((Character *)" A:");
     avr_uart0.uinteger_print((UInteger)UCSR0A);
     avr_uart0.string_print((Character *)" B:");
@@ -355,7 +358,7 @@ void Bridge::loop(UByte mode) {
 	Character character = (Character)_host_uart->frame_get();
 
 	// Echo the input:  (for terminal but DON'T use for ROS Arduino Bridge
-        if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_ECHO_INPUT_CHARS) {
+        if (rab_sonar_->debug_flags_get() & DBG_FLAG_ECHO_INPUT_CHARS) {
 	  _host_uart->frame_put((UShort)character);
 	  if (character == '\r') {
 	    _host_uart->frame_put((UShort)'\n');
@@ -431,30 +434,43 @@ void Bridge::loop(UByte mode) {
 		_left_motor_encoder->target_ticks_per_frame_set(left_speed);
 		_right_motor_encoder->target_ticks_per_frame_set(right_speed);
 
-                if ((rab_sonar_->system_debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
-                // Do normal 'm' command unless Kp are zero, then do direct pwm set
-	           (_left_motor_encoder->proportional_get()  == 0) && 
-	           (_right_motor_encoder->proportional_get() == 0))  {
-	            // bypass PID code if Kp are all zero and scale pwm based on 10 as top speed
-                    int motLeftSpeed;
-                    int motRightSpeed;
-                    if (left_speed > 0) {
-                      motLeftSpeed = (left_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
-                      if (motLeftSpeed > 126)  motLeftSpeed = 126;
-                    } else {
-                      motLeftSpeed = (left_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
-                      if (motLeftSpeed < -126)  motLeftSpeed = -126;
-                    }
-                    if (right_speed > 0) {
-                      motRightSpeed = (right_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
-                      if (motRightSpeed > 126)  motRightSpeed = 126;
-                    } else {
-                      motRightSpeed = (right_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
-                      if (motRightSpeed < -126)  motRightSpeed = -126;
-                    }
-	            _left_motor_encoder->pwm_set(motLeftSpeed);
-	            _right_motor_encoder->pwm_set(motRightSpeed);
-                 }
+                if ((rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
+	         (_left_motor_encoder->proportional_get()  == 0) && 
+	         (_right_motor_encoder->proportional_get() == 0))  {
+                  // Do normal 'm' command unless Kp are zero, then do
+		  // direct pwm set bypass PID code if Kp are all zero
+		  // and scale pwm based on 10 as top speed
+                  int motLeftSpeed;
+                  int motRightSpeed;
+                  if (left_speed > 0) {
+                    motLeftSpeed =
+		     (left_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
+                    if (motLeftSpeed > 126) {
+		      motLeftSpeed = 126;
+		    }
+                  } else {
+                    motLeftSpeed =
+		     (left_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
+		    if (motLeftSpeed < -126) {
+		      motLeftSpeed = -126;
+		    }
+                  }
+                  if (right_speed > 0) {
+                    motRightSpeed =
+		     (right_speed*PID_OVERRIDE_FACTOR) + PID_OVERRIDE_OFFSET;
+                    if (motRightSpeed > 126) {
+		      motRightSpeed = 126;
+		    }
+                  } else {
+                    motRightSpeed =
+		     (right_speed*PID_OVERRIDE_FACTOR) - PID_OVERRIDE_OFFSET;
+                    if (motRightSpeed < -126) {
+		      motRightSpeed = -126;
+		    }
+                  }
+	          _left_motor_encoder->pwm_set(motLeftSpeed);
+	          _right_motor_encoder->pwm_set(motRightSpeed);
+                }
 	      } else {
 		motor_speeds_set(0, 0);
 	      }
@@ -522,18 +538,22 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 
 	      // For debugging:
-              if (rab_sonar_->system_debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
+              if (rab_sonar_->debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
 	        _host_uart->string_print((Text)"Kp ");
 	        _debug_uart->integer_print(
 	        _left_motor_encoder->proportional_get());
 	        _host_uart->string_print((Text)"  Kd ");
-	        _debug_uart->integer_print(_left_motor_encoder->derivative_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->derivative_get());
 	        _host_uart->string_print((Text)"  Ki ");
-	        _debug_uart->integer_print(_left_motor_encoder->integral_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->integral_get());
 	        _host_uart->string_print((Text)"  Ci ");
-	        _debug_uart->integer_print(_left_motor_encoder->integral_cap_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->integral_cap_get());
 	        _host_uart->string_print((Text)"  Do ");
-	        _debug_uart->integer_print( _left_motor_encoder->denominator_get());
+	        _debug_uart->integer_print(
+		  _left_motor_encoder->denominator_get());
 	        _host_uart->string_print((Text)"\r\n");
               }
 
@@ -546,7 +566,7 @@ void Bridge::loop(UByte mode) {
 	      Integer debug_flags = arguments[0];
 
               // set the bits in the system wide debug flags
-              rab_sonar_->system_debug_flags_set(debug_flags);
+              rab_sonar_->debug_flags_set(debug_flags);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
@@ -557,7 +577,8 @@ void Bridge::loop(UByte mode) {
 	      Integer left_speed = arguments[0];
 	      Integer right_speed = arguments[1];
 	      
-              // Cap values to range of 8-bit signed value or we get confusing rollover
+              // Cap values to range of 8-bit signed value or we get
+	      // confusing rollover:
               if (left_speed > 127) {
                 left_speed = 127;
               } else if (left_speed < -127) {
