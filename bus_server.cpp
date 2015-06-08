@@ -484,21 +484,20 @@ void Bridge::loop(UByte mode) {
 	      Integer sonarUnit = arguments[0];
 
               // If sonar number is 0 read a bunch of them in units of cm
-              if (sonarUnit == 0) {
-		UByte sonars_count = rab_sonar_->sonars_count_get();
-                for (UByte unit = 1; unit <= sonars_count ; unit++) {
+	      UByte sonars_count = rab_sonar_->sonars_count_get();
+              if (sonarUnit < sonars_count) {
+                // Read sensor on Loki platform from cached measurements
+                UShort distance = rab_sonar_->ping_get(sonarUnit);
+	        _host_uart->integer_print((Integer)distance);
+	        _host_uart->string_print((Text)"\r\n");
+              } else {
+                for (UByte unit = 0; unit < sonars_count ; unit++) {
                   UShort distance = rab_sonar_->ping_get(unit);
 	          _host_uart->integer_print((Integer)distance);
 	          _host_uart->string_print((Text)" ");
                 }
 	        _host_uart->string_print((Text)"\r\n");
-              } else {
-                // Read sensor on Loki platform from cached measurements
-                UShort distance = rab_sonar_->ping_get(sonarUnit);
-	        _host_uart->integer_print((Integer)distance);
-	        _host_uart->string_print((Text)"\r\n");
               }
-
 	      break;
 	    }
 	    case 'o': {      // read a sensor directly inline in units of mm
