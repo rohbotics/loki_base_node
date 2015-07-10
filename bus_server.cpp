@@ -334,7 +334,7 @@ void Bridge::loop(UByte mode) {
     case TEST_RAB_FREYA:
     case TEST_RAB_LOKI: {
       // Some constants:
-      static const UInteger PID_RATE = 25;			// Hz.
+      static const UInteger PID_RATE = 10;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
       static const UInteger MAXIMUM_ARGUMENTS = 5;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
@@ -523,36 +523,36 @@ void Bridge::loop(UByte mode) {
 	      break;
 	    }
 	    case 'u': {
-	      // Update PID constants ("U Kp Kd Ki Ci Ko");
-	      _left_motor_encoder->proportional_set(arguments[0]);
-	      _left_motor_encoder->derivative_set(arguments[1]);
-	      _left_motor_encoder->integral_set(arguments[2]);
-	      _left_motor_encoder->integral_cap_set(arguments[3]);
-	      _left_motor_encoder->denominator_set(arguments[4]);
-	      _right_motor_encoder->proportional_set(arguments[0]);
-	      _right_motor_encoder->derivative_set(arguments[1]);
-	      _right_motor_encoder->integral_set(arguments[2]);
-	      _right_motor_encoder->integral_cap_set(arguments[3]);
-	      _right_motor_encoder->denominator_set(arguments[4]);
-	      _host_uart->string_print((Text)"OK\r\n");
+	      // Update or just show PID constants ("u Kp Kd Ki Do Ci");
+
+              if (arguments_index == 5) {
+	        _left_motor_encoder->proportional_set(arguments[0]);
+	        _left_motor_encoder->derivative_set(arguments[1]);
+	        _left_motor_encoder->integral_set(arguments[2]);
+	        _left_motor_encoder->denominator_set(arguments[3]);
+	        _left_motor_encoder->integral_cap_set(arguments[4]);
+
+	        _right_motor_encoder->proportional_set(arguments[0]);
+	        _right_motor_encoder->derivative_set(arguments[1]);
+	        _right_motor_encoder->integral_set(arguments[2]);
+	        _right_motor_encoder->denominator_set(arguments[3]);
+	        _right_motor_encoder->integral_cap_set(arguments[4]);
+	        _host_uart->string_print((Text)"OK\r\n");
+              }
 
 	      // For debugging:
-              if (rab_sonar_->debug_flags_get() & DBG_FLAG_PARAMETER_SETUP) {
+              if ((arguments_index < 5) ||
+                  (rab_sonar_->debug_flags_get() & DBG_FLAG_PARAMETER_SETUP)) {
 	        _host_uart->string_print((Text)"Kp ");
-	        _debug_uart->integer_print(
-	        _left_motor_encoder->proportional_get());
+	        _debug_uart->integer_print( _left_motor_encoder->proportional_get());
 	        _host_uart->string_print((Text)"  Kd ");
-	        _debug_uart->integer_print(
-		 _left_motor_encoder->derivative_get());
+	        _debug_uart->integer_print( _left_motor_encoder->derivative_get());
 	        _host_uart->string_print((Text)"  Ki ");
-	        _debug_uart->integer_print(
-		 _left_motor_encoder->integral_get());
-	        _host_uart->string_print((Text)"  Ci ");
-	        _debug_uart->integer_print(
-		 _left_motor_encoder->integral_cap_get());
+	        _debug_uart->integer_print( _left_motor_encoder->integral_get());
 	        _host_uart->string_print((Text)"  Do ");
-	        _debug_uart->integer_print(
-		  _left_motor_encoder->denominator_get());
+	        _debug_uart->integer_print( _left_motor_encoder->denominator_get());
+	        _host_uart->string_print((Text)"  Ci ");
+	        _debug_uart->integer_print( _left_motor_encoder->integral_cap_get());
 	        _host_uart->string_print((Text)"\r\n");
               }
 
