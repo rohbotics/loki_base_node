@@ -523,7 +523,7 @@ void Bridge::loop(UByte mode) {
 	      break;
 	    }
 	    case 'u': {
-	      // Update or just show PID constants ("u Kp Kd Ki Do Ci");
+	      // Update or just show PID constants ("u Kp Kd Ki Ko Ci");
 
               if (arguments_index == 5) {
 	        _left_motor_encoder->proportional_set(arguments[0]);
@@ -549,7 +549,7 @@ void Bridge::loop(UByte mode) {
 	        _debug_uart->integer_print( _left_motor_encoder->derivative_get());
 	        _host_uart->string_print((Text)"  Ki ");
 	        _debug_uart->integer_print( _left_motor_encoder->integral_get());
-	        _host_uart->string_print((Text)"  Do ");
+	        _host_uart->string_print((Text)"  Ko ");
 	        _debug_uart->integer_print( _left_motor_encoder->denominator_get());
 	        _host_uart->string_print((Text)"  Ci ");
 	        _debug_uart->integer_print( _left_motor_encoder->integral_cap_get());
