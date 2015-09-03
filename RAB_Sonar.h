@@ -17,6 +17,8 @@ class RAB_Sonar {
   virtual UShort debug_flags_get() = 0;
   virtual void debug_flags_set(UShort debug_flags) = 0;
   virtual UByte sonars_count_get() = 0;
+  virtual void queue_poll(UART *host_uart,
+   UInteger time_base, UByte id_offset) = 0;
  protected:
   UART *debug_uart_;
 };

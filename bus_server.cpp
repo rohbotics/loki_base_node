@@ -474,13 +474,13 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'p': {
 	      // Read (ping) sonar requested  ("p 5"): 
-	      Integer sonarUnit = arguments[0];
+	      Integer sonar_unit = arguments[0];
 
               // If sonar number is 0 read a bunch of them in units of cm
 	      UByte sonars_count = rab_sonar_->sonars_count_get();
-              if (sonarUnit < sonars_count) {
+              if (sonar_unit < sonars_count) {
                 // Read sensor on Loki platform from cached measurements
-                UShort distance = rab_sonar_->ping_get(sonarUnit);
+                UShort distance = rab_sonar_->ping_get(sonar_unit);
 	        _host_uart->integer_print((Integer)distance);
 	        _host_uart->string_print((Text)"\r\n");
               } else {
@@ -563,6 +563,7 @@ void Bridge::loop(UByte mode) {
 	      }
 
 	      // Sonar queue responses go here:
+	      rab_sonar_->queue_poll(_host_uart, time_base_, 2);
 
 	      // Terminate the response:
 	      _host_uart->string_print((Text)"\r\n");
