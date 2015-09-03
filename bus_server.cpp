@@ -9,10 +9,6 @@
 #include "RAB_Sonar.h"
 
 
-// If we want to reverse raw encoder polarity it can be done here
-#define ENCODER_RIGHT_POLARITY   (1)
-#define ENCODER_LEFT_POLARITY    (1)
-
 #define PID_OVERRIDE_FACTOR 	 (15)   // Factor used if in PID override mode
 #define PID_OVERRIDE_OFFSET      (30)   // Offset to add AFTER PID scaling
 
@@ -20,8 +16,14 @@
 // *Bridge* methods:
 
 Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
-  Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
-  Bus_Motor_Encoder *right_motor_encoder, RAB_Sonar *rab_sonar) {
+ Bus_Slave *bus_slave, Bus_Motor_Encoder *left_motor_encoder,
+ Bus_Motor_Encoder *right_motor_encoder, RAB_Sonar *rab_sonar) {
+
+  rab_sonar_ = rab_sonar;
+  time_base_ = 0;
+  previous_left_encoder_ = 0;
+  previous_right_encoder_ = 0;
+
   // FIXME: These should all have a trailing underscore, not a preceeding one:
   _left_motor_encoder = left_motor_encoder;
   _right_motor_encoder = right_motor_encoder;
@@ -30,7 +32,6 @@ Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
   _bus_uart = bus_uart;
   _debug_uart = debug_uart;
   _is_moving = (Logical)0;
-  rab_sonar_ = rab_sonar;
 }
 
 void Bridge::pid_update(UByte mode) {
@@ -42,15 +43,9 @@ void Bridge::pid_update(UByte mode) {
   if (_is_moving) {
     // Read the encoders:
     //_debug_uart->string_print((Text)"a");
-    Integer left_encoder =
-     _left_motor_encoder->encoder_get() * ENCODER_LEFT_POLARITY;
-    Integer right_encoder =
-     _right_motor_encoder->encoder_get() * ENCODER_RIGHT_POLARITY;
+    //Integer left_encoder = _left_motor_encoder->encoder_get();
+    //Integer right_encoder = _right_motor_encoder->encoder_get();
 
-    // Load the encoder values into the encoder porition (this API is silly):
-    _left_motor_encoder->encoder__set(left_encoder);
-    _right_motor_encoder->encoder__set(right_encoder);
-  
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
 
@@ -411,10 +406,8 @@ void Bridge::loop(UByte mode) {
 	    }
 	    case 'e': {
 	      // Read encoders ("e"):
-	      Integer left_encoder = _left_motor_encoder->encoder_get() *
-	       ENCODER_RIGHT_POLARITY;
-	      Integer right_encoder = _right_motor_encoder->encoder_get() *
-	       ENCODER_LEFT_POLARITY;
+	      Integer left_encoder = _left_motor_encoder->encoder_get();
+	      Integer right_encoder = _right_motor_encoder->encoder_get();
 
 	      // Send the results back:
 	      _host_uart->integer_print(left_encoder);
@@ -511,6 +504,68 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->integer_print((int)distInMm);
 	      _host_uart->string_print((Text)" mm\r\n");
 
+	      break;
+	    }
+	    case 'q': {
+	      // Flush the sensor queue.  The format of the response is
+	      //
+	      //   delta_time_base sensor1 sensor2 ... sensorN
+	      //
+	      // where:
+	      //
+	      // * *delta_time_base* is the change in time_base from the
+	      //   the previous *time_base* measured in microseconds.
+	      //   All sensor times are relative to the new *time_base*.
+	      //
+	      // * *SensorI* is a sensor triple of the form "id:time:value"
+	      //   where *id* is a number that identifies the sensor, *time*
+	      //   is a signed time in microseconds relative to *time_base*,
+	      //   and *value* is a signed value for the sensor.
+	      //
+	      // For now, the sensor are hard coded as:
+	      //
+	      // * 0: left encoder    # Value is a delta from the prevous value
+	      // * 1: right encoder   # Value is a delta from the previous value
+	      // * 2: Sonar 0         # Value is the distance in microseconds:
+	      // * 3: Sonar 1         # Value is the distance in microseconds:
+	      //   ...
+	      // * 17: Sonar 15       # Value is the distance in microseconds:
+
+	      // Send the increase in *time_base_* and update it as well:
+	      UInteger next_time_base = micros();
+	      _host_uart->integer_print((Integer)(next_time_base - time_base_));
+	      time_base_ = next_time_base;
+
+	      // Grab the left/right encoder values:
+	      UInteger left_encoder = _left_motor_encoder->encoder_get();
+	      UInteger right_encoder = _right_motor_encoder->encoder_get();
+
+	      //_host_uart->string_print((Text)" [");
+	      //_host_uart->integer_print((Integer)left_encoder);
+	      //_host_uart->string_print((Text)":");
+	      //_host_uart->integer_print((Integer)right_encoder);
+	      //_host_uart->string_print((Text)"]");
+
+	      // Send left *left encoder* delta if it changed:
+	      if (left_encoder != previous_left_encoder_) {
+		_host_uart->string_print((Text)" 0:0:");
+		_host_uart->integer_print(
+		  (Integer)(left_encoder - previous_left_encoder_));
+		previous_left_encoder_ = left_encoder;
+	      }
+	      
+	      // Send the *right_encoder* delta if it changed:
+	      if (right_encoder != previous_right_encoder_) {
+		_host_uart->string_print((Text)" 1:0:");
+		_host_uart->integer_print(
+		  (Integer)(right_encoder - previous_right_encoder_));
+		previous_right_encoder_ = right_encoder;
+	      }
+
+	      // Sonar queue responses go here:
+
+	      // Terminate the response:
+	      _host_uart->string_print((Text)"\r\n");
 	      break;
 	    }
 	    case 'r': {

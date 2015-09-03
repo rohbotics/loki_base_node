@@ -59,6 +59,9 @@ class Bridge {
     Bus_Motor_Encoder *_left_motor_encoder;
     Bus_Motor_Encoder *_right_motor_encoder;
     RAB_Sonar *rab_sonar_;
+    UInteger time_base_;
+    UInteger previous_left_encoder_;
+    UInteger previous_right_encoder_;
 };
 #endif // BUS_SERVER_H_INCLUDED
 
