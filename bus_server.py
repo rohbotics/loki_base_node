@@ -19,14 +19,42 @@
     http://www.gnu.org/licenses/gpl.html
 """
 
+# Put all of the imports into alphabetical order:
+from geometry_msgs.msg import Quaternion, Pose, Twist
+from math import cos, degrees, pi as PI, radians, sin
+from nav_msgs.msg import Odometry
 import rospy
-from ros_arduino_python.arduino_driver import Arduino
-from ros_arduino_python.arduino_sensors import *
-from ros_arduino_msgs.srv import *
-from ros_arduino_python.base_controller import BaseController
-from geometry_msgs.msg import Twist
-import os, time
+import os
+from sensor_msgs.msg import Range
+from serial.serialutil import SerialException
+from serial import Serial
+import sys
+from tf.broadcaster import TransformBroadcaster
 import thread
+import time
+import traceback
+
+#from ros_arduino_python.arduino_driver import Arduino
+#from ros_arduino_python.arduino_sensors import *
+#from ros_arduino_msgs.srv import *
+#from ros_arduino_python.base_controller import BaseController
+
+#import roslib; roslib.load_manifest('ros_arduino_python')
+#from ros_arduino_msgs.msg import *
+#import roslib; roslib.load_manifest('ros_arduino_python')
+
+
+LOW = 0
+HIGH = 1
+
+INPUT = 0
+OUTPUT = 1
+
+SERVO_MAX = 180
+SERVO_MIN = 0
+
+def main():
+    print("Hello")
 
 class ArduinoROS():
     def __init__(self):
@@ -196,10 +224,6 @@ class ArduinoROS():
             pass
         rospy.loginfo("Shutting down Arduino Node...")
         
-if __name__ == '__main__':
-    myArduino = ArduinoROS()
-#!/usr/bin/env python
-
 """
     A Python driver for the Arduino microcontroller running the
     ROSArduinoBridge firmware.
@@ -220,18 +244,6 @@ if __name__ == '__main__':
     http://www.gnu.org/licenses/gpl.html
 
 """
-
-import thread
-from math import pi as PI, degrees, radians
-import os
-import time
-import sys, traceback
-from serial.serialutil import SerialException
-from serial import Serial
-import rospy
-
-SERVO_MAX = 180
-SERVO_MIN = 0
 
 class Arduino:
     ''' Configuration Parameters
@@ -580,7 +592,7 @@ class Arduino:
  
 
 """ Basic test for connectivity """
-if __name__ == "__main__":
+if False:
     if os.name == "posix":
         portName = "/dev/ttyACM0"
     else:
@@ -608,8 +620,6 @@ if __name__ == "__main__":
     myArduino.close()
     
     print "Shutting down Arduino."
-    
-#!/usr/bin/env python
 
 """
     Sensor class for the arudino_python package
@@ -630,16 +640,6 @@ if __name__ == "__main__":
     http://www.gnu.org/licenses/gpl.html
 """
 
-import roslib; roslib.load_manifest('ros_arduino_python')
-import rospy
-from sensor_msgs.msg import Range
-from ros_arduino_msgs.msg import *
-
-LOW = 0
-HIGH = 1
-
-INPUT = 0
-OUTPUT = 1
     
 class MessageType:
     ANALOG = 0
@@ -883,12 +883,10 @@ class MaxEZ1Sensor(SonarSensor):
         return self.controller.get_MaxEZ1(self.trigger_pin, self.output_pin)
 
             
-if __name__ == '__main__':
+if False:
     myController = Controller()
     mySensor = SonarSensor(myController, "My Sonar", type=Type.PING, pin=0, rate=10)
             
-#!/usr/bin/env python
-
 """
     A base controller class for the Arduino microcontroller
     
@@ -909,14 +907,6 @@ if __name__ == '__main__':
     
     http://www.gnu.org/licenses
 """
-import roslib; roslib.load_manifest('ros_arduino_python')
-import rospy
-import os
-
-from math import sin, cos, pi
-from geometry_msgs.msg import Quaternion, Twist, Pose
-from nav_msgs.msg import Odometry
-from tf.broadcaster import TransformBroadcaster
  
 """ Class to receive Twist commands and publish Odometry data """
 class BaseController:
@@ -1146,9 +1136,5 @@ class BaseController:
         self.v_des_left = int(left * self.ticks_per_meter / self.arduino.PID_RATE)
         self.v_des_right = int(right * self.ticks_per_meter / self.arduino.PID_RATE)
         
-
-        
-
-    
-
-    
+if __name__ == '__main__':
+    main()
