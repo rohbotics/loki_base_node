@@ -26,8 +26,9 @@ from nav_msgs.msg import Odometry
 import rospy
 import os
 from sensor_msgs.msg import Range
-from serial.serialutil import SerialException
-from serial import Serial
+#from serial.serialutil import SerialException
+#from serial import Serial
+from serial import *
 import sys
 from tf.broadcaster import TransformBroadcaster
 import thread
@@ -54,17 +55,369 @@ SERVO_MAX = 180
 SERVO_MIN = 0
 
 def main():
-    print("Hello")
+    bus_server = Bus_Server()
+    bus_server.poll_loop()
+    bus_server.shut_down()
 
-class ArduinoROS():
+class Bus_Server:
+    """ *Bus_Server*: The Bus_Server encapsulates all the of the code
+	needed to talk to the robot over a serial connection and
+	publish/subscribe all requisite ROS topics for ROS.
+    """
+
+    def __init__(self):
+	""" *Bus_Server*: Initialize the bus server.
+	"""
+
+	# Initialize the *logger*:
+	logger = Logger(True)
+	logger.info("Starting bus server...")
+
+	# Create the ROS initializion node:
+	rospy.init_node("bus_server", log_level=rospy.DEBUG)
+
+	# Clean up when terminating the node:
+	rospy.on_shutdown(self.shut_down)
+
+	# Grab some parameter values from the ROS parameter server:
+	self.base_frame_ = rospy.get_param("~base_frame", 'base_link')
+	self.baud_rate_ = int(rospy.get_param("~baud", 57600))
+	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
+	self.port_name_ = rospy.get_param("~port", "/dev/ttyACM0")
+	self.timeout_ = rospy.get_param("~timeout", 0.5)
+
+	# Overall loop rate: should be faster than fastest sensor rate
+	self.rate_ = rospy.Rate(self.poll_rate_)
+
+	# Set up command velocity pulisher:
+	self.cmd_vel_ = Twist()
+	self.cmd_vel_pub_ = rospy.Publisher("cmd_vel", Twist, queue_size=5)
+
+	# Open the serial *connection*:
+	connection = Connection(logger, "/dev/ttyUSB0", 115200, self.timeout_)
+
+	# Store stuff into *self*:
+	self.connection_ = connection
+	self.logger_ = logger
+
+	# Create all of the senosrs:
+	sensors = []
+	sensor_params = rospy.get_param("~sensors", dict({}))
+	for name, params in sensor_params.iteritems():
+	    #logger.info("{0}: {1}".format(name, str(params)))
+	    # The *pop**() method modifies *params*, so we make a copy first:
+	    params = params.copy()
+
+	    # Grab *sensor_id*, *frame_id*, and *sensor_type* from *params*:
+	    sensor_id = params.pop("id", -1)
+	    frame_id = params.pop('frame_id', self.base_frame_)
+	    sensor_type = params.pop("type", "None")
+            
+	    # Dispatch on *sensor_type*:
+	    sensor = None
+            if sensor_type == "Sonar":
+		# We have sonar, so grab the additional fields and create
+		# the *Sonar* object:
+                sensor = Sonar_Sensor(name,
+		  Sensor.SONAR_TYPE, sensor_id, frame_id,
+		  field_of_view = params.pop("field_of_view", .43632347),
+		  min_range = params.pop('min_range', 0.02),
+		  max_range = params.pop('max_range', 3.00))
+		assert sensor.sensor_id == sensor_id
+	    else:
+		logger.warn(
+		  "Unrecognized sensor type '{0}'".format(sensor_type))
+
+	    if id >=0:
+		assert isinstance(sensor, Sensor)
+		while (len(sensors) <= sensor_id):
+		    sensors.append(None)
+		sensors[sensor_id] = sensor
+	
+	# List all of the *sensors* in numerical order:
+	for sensor in sensors:
+	    if sensor != None:
+		logger.info("[{0}]: {1}".format(sensor.sensor_id, sensor))
+
+    def poll_loop(self):
+	""" *Bus_Server*: Perform polling.
+	"""
+
+	logger = self.logger_
+	connection = self.connection_
+	rate = self.rate_
+
+	delta_poll_time = rospy.Duration(1.0 / float(self.poll_rate_))
+	now_routine = rospy.get_rostime
+	next_poll_time = now_routine()
+
+        # Start polling the sensors and base controller
+	robot_base_time = None
+        while not rospy.is_shutdown():
+	    # Figure out if it is time to poll the sensor queue:
+            now = now_routine()
+	    if now >= next_poll_time:
+		# Update *next_poll_time*:
+		next_poll_time += delta_poll_time
+
+		# Grab the next back of sensor values from the sensor queue:
+		poll_values = connection.execute("q").split()
+		print("Poll: {0}".format(poll_values))
+	
+		# The first value in *poll_values* is the number of
+		# microseconds that have elapsed on the robot since
+		# the last time.  We need to add that to *robot_base_time*:
+		if len(poll_values) == 0:
+		    logger.warn("Missing time delta from 'q' command")
+		else:
+		    # We have the microseonds value in *poll_values[0]*:
+		    if robot_base_time == None:
+			# This is the first time, so we just use *now()*:
+			robot_base_time = now_routine()
+		    else:
+			# Convert from integer microseconds into float and
+			# add it to *robot_base_time*:
+			try:
+			    robot_base_time += \
+			      Duration(float(poll_values[0]) / 1000000.0)
+			except:
+			    # Something went wrong, so reset *robot_base_time*:
+			    robot_base_time = now_routine()
+		print("robot_base_time={0:d}.{1:09d}".
+		 format(robot_base_time.secs,robot_base_time.nsecs))
+
+	    # Sleep until next time:
+            rate.sleep()
+    
+    def shut_down(self):
+	""" *Bus_Server*: Shut down the bus_server.
+	"""
+
+	logger = self.logger_
+
+        # Stop the robot
+	try:
+	    logger.info("Stopping the robot...")
+	    #self.cmd_vel_pub.Publish(Twist())
+	    rospy.sleep(2)
+        except:
+            pass
+	logger.info("Shutting down Bus Server node...")
+
+	# Close the serial connection:
+	self.connection_.close()
+
+class Connection:
+    """ *Connection*: Mangage the serial port connection.
+    """
+
+    def __init__(self, logger, port_name, baud_rate, timeout):
+	""" *Connection*: Initialize a connection using *port_name*,
+	    *baud_rate* and *timeout*.
+	"""
+
+	# Verify argument types:
+	assert isinstance(logger, Logger)
+	assert isinstance(port_name, str)
+	assert isinstance(baud_rate, int)
+	assert isinstance(timeout, int) or isinstance(timeout, float)
+
+	# Load up *self*:
+	self.baud_rate_ = baud_rate
+	self.logger_ = logger
+        self.mutex_ = thread.allocate_lock()
+	self.port_name_ = port_name
+	self.timeout_ = timeout
+
+	# Open the connection:
+        logger.info("Connecting to serial port '{0}' ...".format(port_name))
+        try:
+            self.port_ = port = Serial(port=port_name, baudrate=baud_rate,
+              bytesize=EIGHTBITS, parity=PARITY_NONE, stopbits=STOPBITS_ONE,
+              timeout=timeout, writeTimeout=timeout, xonxoff=False,
+	      rtscts=False, dsrdtr=False)
+	    if not port.isOpen():
+	      logger.fatal("Serial port '{0}' is not open".format(port_name))
+
+            #while True:
+	    #	value = self.execute("b")
+	    #	print(value.strip())
+
+	    # Read the baud rate to make sure we are connected:
+	    # FIXME: We should a a firmware version number command!!!
+	    baud = 0
+	    for count in range(3):
+		# Give the firmware some time to wake-up:
+		time.sleep(1)
+		baud = self.baud_get()
+		if baud == baud_rate:
+		    break
+	    if baud != baud_rate:
+		raise SerialException
+        except SerialException:
+	    # If we get here, we die:
+	    logger.warn("Serial Exception:")
+	    logger.warn(sys.exc_info())
+	    logger.warn("Traceback follows:")
+	    logger.warn(traceback.format_exc())
+	    logger.fatal("Cannot connect to robot!")
+
+	# Log that we established a connection:
+        logger.info("Serial connection at {0} baud".format(baud_rate))
+
+    def baud_get(self):
+        """ *Connection*: Return the baud rate from the connected platform.
+        """
+
+	value = self.execute("b");
+	try:
+	    baud_rate = int(value)
+	except:
+	    baud_rate = 0;
+	    self.logger_.warn(
+	      "Connection.baud_get: Got '{0}' instead baoud_rate".format(value))
+        return baud_rate
+
+    def close(self): 
+        """ *Connection*: Close the connection:
+        """
+
+        self.port_.close() 
+
+    def execute(self, command):
+        """ *Connection*: Thread safe execution of "command" on the Arduino
+	    returning a single integer value.
+        """
+
+	#print("=>Connection.execute()")
+        #rospy.loginfo("Send command '{0}' to arduino".format(cmd))
+
+	# Make sure we are the only thread using the connection:
+        self.mutex_.acquire()
+        
+	port = self.port_
+	try:
+	    # Make sure thare is no input left over from a previous command:
+            port.flushInput()
+
+	    # Send *command* followed by a carriage return:
+	    port.write(command)
+	    port.write("\r")
+	    port.flush()
+
+	    value = port.readline()
+	except SerialException:
+	    print("Serial Exception Occurred")
+
+	# Release the lock for the next thread:
+        self.mutex_.release()
+
+	return value
+
+class Logger:
+    def __init__(self, verbose=True):
+	""" *Logger*: Initialize *self* with *verbose*.
+	"""
+
+	self.verbose_ = verbose
+
+    def fatal(self, message):
+	""" *Logger*: Log a fatal *message* and terminate program.
+	"""
+
+	self.warn(message)
+	os._exit(1)
+
+    def info(self, message):
+	""" *Looger*: Log an information *message*.
+	"""
+
+	rospy.loginfo(message)
+	if self.verbose_:
+	    print(message)
+
+    def warn(self, message):
+	""" *Logger*: Log a warning *message*.
+	"""
+
+	rospy.loginfo(message)
+	print(message)
+
+class Sensor:
+    """ *Sensor* is a base class for all sensors.
+    """
+
+    NO_TYPE = 0
+    SONAR_TYPE = 1
+
+    def __init__(self, name, sensor_type, sensor_id, frame_id):
+	""" *Sensor*: Initialize a *Sensor* object to contain *name*,
+	    *sensor_type*, *id*, and *frame_id*.
+	"""
+
+	# Verify Argument Types:
+	assert isinstance(name, str)
+	assert isinstance(sensor_type, int)
+	assert isinstance(sensor_id, int)
+	assert isinstance(frame_id, str)
+
+	self.name = name
+	self.sensor_type = sensor_type
+	self.sensor_id = sensor_id
+	self.frame_id = frame_id
+
+    def __format__(self, format):
+	""" *Sensor*: Return a formated version of *self*.  For now, the
+	    *format* argument is ignored.
+	"""
+
+	return "name:'{0}' type:{1} id:{2} frame_id:'{3}'".format(
+	  self.name, self.sensor_type, self.sensor_id, self.frame_id)
+
+class Sonar_Sensor(Sensor):
+    def __init__(self, name, sensor_type, sensor_id, frame_id,
+      field_of_view, min_range, max_range):
+	""" *Sonar_Sensor*: Initialize a *Sonar_Sensor* to contain *name*,
+	    *sensor_id*, *frame_id*, *field_of_view*, *min_range*, *max_range*.
+	"""
+
+	# Verify Argument Types:
+	assert isinstance(name, str)
+	assert isinstance(sensor_id, int)
+	assert isinstance(frame_id, str)
+	assert isinstance(field_of_view, float)
+	assert isinstance(min_range, float)
+	assert isinstance(max_range, float)
+
+	Sensor.__init__(self, name, Sensor.SONAR_TYPE, sensor_id, frame_id)
+	self.field_of_view_ = field_of_view
+	self.min_range_ = min_range
+	self.max_range_ = max_range
+
+    def __format__(self, format):
+	""" *Sonar_Sensor*: Return formated version of "self".  For now,
+	    the *format* argument is ignored.
+	"""
+
+	# Verify arguments:
+	assert isinstance(format, str)
+	return "{0} field_of_view: {1} min_range: {2} max_range: {3}".format(
+	  Sensor.__format__(self, ""),
+	  self.field_of_view_, self.min_range_, self.max_range_)
+
+
+#######################################################
+# Old stuff here
+
+class XArduinoROS():
     def __init__(self):
         rospy.init_node('Arduino', log_level=rospy.DEBUG)
                 
         # Cleanup when termniating the node
         rospy.on_shutdown(self.shutdown)
         
-        self.port = rospy.get_param("~port", "/dev/ttyACM0")
-        self.baud = int(rospy.get_param("~baud", 57600))
+        self.port_name = rospy.get_param("~port_name", "/dev/ttyACM0")
+        self.baud = int(rospy.get_param("~baud", 115200))
         self.timeout = rospy.get_param("~timeout", 0.5)
         self.base_frame = rospy.get_param("~base_frame", 'base_link')
 
@@ -245,7 +598,7 @@ class ArduinoROS():
 
 """
 
-class Arduino:
+class XArduino:
     ''' Configuration Parameters
     '''    
     N_ANALOG_PORTS = 6
@@ -274,39 +627,6 @@ class Arduino:
         
         # An array to cache digital sensor readings
         self.digital_sensor_cache = [None] * self.N_DIGITAL_PORTS
-    
-    def connect(self):
-        try:
-            print "Connecting to Arduino on port", self.port, "..."
-            self.port = Serial(port=self.port, baudrate=self.baudrate, timeout=self.timeout, writeTimeout=self.writeTimeout)
-            # The next line is necessary to give the firmware time to wake up.
-            time.sleep(1)
-            test = self.get_baud()
-            if test != self.baudrate:
-                time.sleep(1)
-                test = self.get_baud()   
-                if test != self.baudrate:
-                    raise SerialException
-            print "Connected at", self.baudrate
-            print "Arduino is ready."
-
-        except SerialException:
-            print "Serial Exception:"
-            print sys.exc_info()
-            print "Traceback follows:"
-            traceback.print_exc(file=sys.stdout)
-            print "Cannot connect to Arduino!"
-            os._exit(1)
-
-    def open(self): 
-        ''' Open the serial port.
-        '''
-        self.port.open()
-
-    def close(self): 
-        ''' Close the serial port.
-        '''
-        self.port.close() 
     
     def motors_configure(self, motors_reversed = False,
       left_motor_reversed = False, right_motor_reversed = False):
@@ -641,7 +961,7 @@ if False:
 """
 
     
-class MessageType:
+class XMessageType:
     ANALOG = 0
     DIGITAL = 1
     RANGE = 2
@@ -649,7 +969,7 @@ class MessageType:
     INT = 4
     BOOL = 5
     
-class Sensor(object):
+class XSensor(object):
     def __init__(self, controller, name, pin, rate, frame_id, direction="input", **kwargs):
         self.controller = controller
         self.name = name
@@ -689,7 +1009,7 @@ class Sensor(object):
             
             self.t_next = now + self.t_delta
     
-class AnalogSensor(Sensor):
+class XAnalogSensor(XSensor):
     def __init__(self, *args, **kwargs):
         super(AnalogSensor, self).__init__(*args, **kwargs)
                 
@@ -713,7 +1033,7 @@ class AnalogSensor(Sensor):
     def write_value(self, value):
         return self.controller.analog_write(self.pin, value)
     
-class AnalogFloatSensor(Sensor):
+class XAnalogFloatSensor(XSensor):
     def __init__(self, *args, **kwargs):
         super(AnalogFloatSensor, self).__init__(*args, **kwargs)
                 
@@ -738,7 +1058,7 @@ class AnalogFloatSensor(Sensor):
         return self.controller.analog_write(self.pin, value)
     
         
-class DigitalSensor(Sensor):
+class XDigitalSensor(XSensor):
     def __init__(self, *args, **kwargs):
         super(DigitalSensor, self).__init__(*args, **kwargs)
         
@@ -765,7 +1085,7 @@ class DigitalSensor(Sensor):
         return self.controller.digital_write(self.pin, self.value)
     
     
-class RangeSensor(Sensor):
+class XRangeSensor(XSensor):
     def __init__(self, *args, **kwargs):
         super(RangeSensor, self).__init__(*args, **kwargs)
         
@@ -780,20 +1100,20 @@ class RangeSensor(Sensor):
         self.msg.header.stamp = rospy.Time.now()
 
         
-class SonarSensor(RangeSensor):
+class XSonarSensor(XRangeSensor):
     def __init__(self, *args, **kwargs):
         super(SonarSensor, self).__init__(*args, **kwargs)
         
         self.msg.radiation_type = Range.ULTRASOUND
         
         
-class IRSensor(RangeSensor):
+class XIRSensor(XRangeSensor):
     def __init__(self, *args, **kwargs):
         super(IRSensor, self).__init__(*args, **kwargs)
         
         self.msg.radiation_type = Range.INFRARED
         
-class Ping(SonarSensor):
+class XPing(XSonarSensor):
     def __init__(self, *args, **kwargs):
         super(Ping, self).__init__(*args, **kwargs)
                 
@@ -813,7 +1133,7 @@ class Ping(SonarSensor):
         return distance
     
         
-class GP2D12(IRSensor):
+class XGP2D12(XIRSensor):
     def __init__(self, *args, **kwargs):
         super(GP2D12, self).__init__(*args, **kwargs)
         
@@ -841,7 +1161,7 @@ class GP2D12(IRSensor):
         
         return distance
     
-class PololuMotorCurrent(AnalogFloatSensor):
+class XPololuMotorCurrent(XAnalogFloatSensor):
     def __init__(self, *args, **kwargs):
         super(PololuMotorCurrent, self).__init__(*args, **kwargs)
         
@@ -850,7 +1170,7 @@ class PololuMotorCurrent(AnalogFloatSensor):
         milliamps = self.controller.analog_read(self.pin) * 34
         return milliamps / 1000.0
     
-class PhidgetsVoltage(AnalogFloatSensor):
+class XPhidgetsVoltage(XAnalogFloatSensor):
     def __init__(self, *args, **kwargs):
         super(PhidgetsVoltage, self).__init__(*args, **kwargs)
         
@@ -859,7 +1179,7 @@ class PhidgetsVoltage(AnalogFloatSensor):
         voltage = 0.06 * (self.controller.analog_read(self.pin) - 500.)
         return voltage
     
-class PhidgetsCurrent(AnalogFloatSensor):
+class XPhidgetsCurrent(XAnalogFloatSensor):
     def __init__(self, *args, **kwargs):
         super(PhidgetsCurrent, self).__init__(*args, **kwargs)
         
@@ -868,7 +1188,7 @@ class PhidgetsCurrent(AnalogFloatSensor):
         current = 0.05 * (self.controller.analog_read(self.pin) - 500.)
         return current
     
-class MaxEZ1Sensor(SonarSensor):
+class XMaxEZ1Sensor(XSonarSensor):
     def __init__(self, *args, **kwargs):
         super(MaxEZ1Sensor, self).__init__(*args, **kwargs)
         
@@ -909,7 +1229,7 @@ if False:
 """
  
 """ Class to receive Twist commands and publish Odometry data """
-class BaseController:
+class XBaseController:
     def __init__(self, arduino, base_frame):
         self.arduino = arduino
         self.base_frame = base_frame
