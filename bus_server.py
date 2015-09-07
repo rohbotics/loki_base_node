@@ -85,6 +85,9 @@ class Bus_Server:
 	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
 	self.port_name_ = rospy.get_param("~port", "/dev/ttyACM0")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
+	self.x_ = 0.0
+	self.y_ = 0.0
+	self.th_ = 0.0
 
 	# Overall loop rate: should be faster than fastest sensor rate
 	self.rate_ = rospy.Rate(self.poll_rate_)
@@ -99,9 +102,11 @@ class Bus_Server:
 	# Store stuff into *self*:
 	self.connection_ = connection
 	self.logger_ = logger
+	self.sensors_ = sensors = []
+        self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
+        self.odom_broadcaster_ = TransformBroadcaster()
 
 	# Create all of the senosrs:
-	sensors = []
 	sensor_params = rospy.get_param("~sensors", dict({}))
 	for name, params in sensor_params.iteritems():
 	    #logger.info("{0}: {1}".format(name, str(params)))
@@ -122,7 +127,7 @@ class Bus_Server:
 		  Sensor.SONAR_TYPE, sensor_id, frame_id,
 		  field_of_view = params.pop("field_of_view", .43632347),
 		  min_range = params.pop('min_range', 0.02),
-		  max_range = params.pop('max_range', 3.00))
+		  max_range = params.pop('max_range', 100.00))
 		assert sensor.sensor_id == sensor_id
 	    else:
 		logger.warn(
@@ -143,11 +148,18 @@ class Bus_Server:
 	""" *Bus_Server*: Perform polling.
 	"""
 
+	# Grab values from *self*:
+	base_frame = self.base_frame_
 	logger = self.logger_
 	connection = self.connection_
 	rate = self.rate_
+	sensors = self.sensors_
+	odom_broadcaster = self.odom_broadcaster_
+	odom_pub = self.odom_pub_
 
 	delta_poll_time = rospy.Duration(1.0 / float(self.poll_rate_))
+
+	Duration = rospy.Duration
 	now_routine = rospy.get_rostime
 	next_poll_time = now_routine()
 
@@ -183,9 +195,78 @@ class Bus_Server:
 			except:
 			    # Something went wrong, so reset *robot_base_time*:
 			    robot_base_time = now_routine()
-		print("robot_base_time={0:d}.{1:09d}".
-		 format(robot_base_time.secs,robot_base_time.nsecs))
 
+		    #print("robot_base_time={0:d}.{1:09d}".
+		    # format(robot_base_time.secs,robot_base_time.nsecs))
+
+		    # Now process any remaining *poll_values*:
+		    #print("poll_values=", poll_values)
+		    for poll_value in poll_values[1:]:
+			#print("poll_value=", poll_value)
+			id_time_value = poll_value.split(':')
+			try:
+			    sensor_id = int(id_time_value[0])
+			    #print("sensor_id={0}".format(sensor_id))
+			    time = robot_base_time + \
+			      Duration(float(id_time_value[1]) / 1000000.0)
+			    #print("time={0:d}.{1:09d}".
+			    #  format(time.secs, time.nsecs))
+			    value = float(id_time_value[2]) / 1000.0 # mm=>M
+			    #print("value={0}".format(value))
+			    try:
+			        sensor = sensors[sensor_id]
+				sensor.value_set(value, time)
+			    except:
+				logger.warn("Sensor id {0} not defined".
+				  format(sendor_id))
+			except:
+			    logger.warn("Incorrect poll value '{0}'".
+			      format(poll_value))
+
+		    x = self.x_
+		    y = self.y_
+                    th = self.th_
+		    quaternion = Quaternion()
+		    quaternion.x = 0.0 
+		    quaternion.y = 0.0
+		    quaternion.z = sin(th / 2.0)
+		    quaternion.w = cos(th / 2.0)
+    
+		    # Create the odometry transform frame broadcaster.
+		    odom_broadcaster.sendTransform(
+ 		      (x, y, 0),
+		      (quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+		      now,
+		      base_frame,
+		      "odom")
+    
+		    odom = Odometry()
+		    odom.header.frame_id = "odom"
+		    odom.child_frame_id = base_frame
+		    odom.header.stamp = now
+		    odom.pose.pose.position.x = x
+		    odom.pose.pose.position.y = y
+		    odom.pose.pose.position.z = 0
+		    odom.pose.pose.orientation = quaternion
+		    odom.pose.covariance = \
+		      [0.2,  0,    0,     0,     0,     0,
+		       0,    0.2,  0,     0,     0,     0,
+		       0,    0,    0.2,   0,     0,     0,
+		       0,    0,    0,     0.2,   0,     0,
+		       0,    0,    0,     0,     0.2,   0,
+		       0,    0,    0,     0,     0,     0.2 ]
+		    odom.twist.twist.linear.x = 0 #vxy
+		    odom.twist.twist.linear.y = 0
+		    odom.twist.twist.angular.z = 0 # vth
+		    odom.twist.covariance = \
+		      [0.2,  0,    0,     0,     0,     0,
+                       0,    0.2,  0,     0,     0,     0,
+                       0,    0,    0.2,   0,     0,     0,
+                       0,    0,    0,     0.2,   0,     0,
+                       0,    0,    0,     0,     0.2,   0,
+                       0,    0,    0,     0,     0,     0.2]
+		    odom_pub.publish(odom)
+            
 	    # Sleep until next time:
             rate.sleep()
     
@@ -389,10 +470,21 @@ class Sonar_Sensor(Sensor):
 	assert isinstance(min_range, float)
 	assert isinstance(max_range, float)
 
+	# Load up *self*:
 	Sensor.__init__(self, name, Sensor.SONAR_TYPE, sensor_id, frame_id)
 	self.field_of_view_ = field_of_view
 	self.min_range_ = min_range
 	self.max_range_ = max_range
+	self.msg_ = msg = Range()
+	self.pub_ = rospy.Publisher("~sensor/{0}".format(name),
+	  Range, queue_size=5)
+
+	# Initialize *msg* a little more:
+	msg.header.frame_id = frame_id
+        msg.radiation_type = Range.ULTRASOUND
+	msg.field_of_view = field_of_view
+	msg.min_range = min_range
+	msg.max_range = max_range
 
     def __format__(self, format):
 	""" *Sonar_Sensor*: Return formated version of "self".  For now,
@@ -405,6 +497,18 @@ class Sonar_Sensor(Sensor):
 	  Sensor.__format__(self, ""),
 	  self.field_of_view_, self.min_range_, self.max_range_)
 
+    def value_set(self, value, time):
+	""" *Sonar_Sensor*: Set the *value* and *time* for *self*
+	    and publish it.
+	"""
+
+	# Load *value* and *time* into *msg*:
+	msg = self.msg_
+	msg.range = value
+	msg.header.stamp = time
+
+	# Publish *msg*:
+	self.pub_.publish(msg)
 
 #######################################################
 # Old stuff here
@@ -1389,7 +1493,7 @@ class XBaseController:
                                     0,    0,    0,     0.2,   0,     0,
                                     0,    0,    0,     0,     0.2,   0,
                                     0,    0,    0,     0,     0,     0.2]
-            odom.twist.twist.linear.x = vxy
+            odom.twist.twist.linear.x = 0.0 #vxy
             odom.twist.twist.linear.y = 0
             odom.twist.twist.angular.z = vth
             odom.twist.covariance = [0.2,  0,    0,     0,     0,     0,
