@@ -43,8 +43,13 @@ void Bridge::pid_update(UByte mode) {
   if (_is_moving) {
     // Read the encoders:
     //_debug_uart->string_print((Text)"a");
-    //Integer left_encoder = _left_motor_encoder->encoder_get();
-    //Integer right_encoder = _right_motor_encoder->encoder_get();
+
+    // Transfer the encoder values into the PID portion of the code.
+    // YES, this is a silly interface:
+    Integer left_encoder = _left_motor_encoder->encoder_get();
+    Integer right_encoder = _right_motor_encoder->encoder_get();
+    _left_motor_encoder->pid_encoder_set(left_encoder);
+    _left_motor_encoder->pid_encoder_set(right_encoder);
 
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
