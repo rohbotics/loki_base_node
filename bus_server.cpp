@@ -49,7 +49,7 @@ void Bridge::pid_update(UByte mode) {
     Integer left_encoder = _left_motor_encoder->encoder_get();
     Integer right_encoder = _right_motor_encoder->encoder_get();
     _left_motor_encoder->pid_encoder_set(left_encoder);
-    _left_motor_encoder->pid_encoder_set(right_encoder);
+    _right_motor_encoder->pid_encoder_set(right_encoder);
 
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
