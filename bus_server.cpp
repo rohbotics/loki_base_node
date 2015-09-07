@@ -34,38 +34,84 @@ Bridge::Bridge(AVR_UART *host_uart, AVR_UART *bus_uart, AVR_UART *debug_uart,
   _is_moving = (Logical)0;
 }
 
+// Simple print to debug utility taken out to keep code fairly clean
+void Bridge::pid_debug_print_1(Logical verbose)
+{
+    #ifdef BUS_LOKI_UART1_AS_DEBUG
+    _bus_uart->print((Text)"Pid R: ");
+
+    if (verbose)   {    // Print minimal unless in serious debug mode as it takes time
+      _bus_uart->print((Text)" Kp ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->proportional_get());
+      _bus_uart->print((Text)" Ki ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->integral_get());
+      _bus_uart->print((Text)" Kd ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->derivative_get());
+      _bus_uart->print((Text)" sPwm ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->output_get());
+      _bus_uart->print((Text)" pPwm ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->previous_pwm_get());
+      _bus_uart->print((Text)" enc ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->encoder_get());
+      _bus_uart->print((Text)" pEnc ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->previous_encoder_get());
+      _bus_uart->print((Text)" pIT ");
+      _bus_uart->integer_print((Integer)_right_motor_encoder->integral_term_get());
+    }
+
+    _bus_uart->print((Text)" tgt ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->target_ticks_per_frame_get());
+    #endif
+}
+
+
+// Simple print to debug utility taken out to keep code fairly clean
+void Bridge::pid_debug_print_2()
+{
+    #ifdef BUS_LOKI_UART1_AS_DEBUG
+    _bus_uart->print((Text)" Pwm ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->output_get());
+    _bus_uart->print((Text)" Perr ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->perr_get());
+    _bus_uart->print((Text)" dP ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->pid_delta_get());
+    _bus_uart->print((Text)" Rate ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->rate_get());
+    _bus_uart->print((Text)" fIT ");
+    _bus_uart->integer_print((Integer)_right_motor_encoder->integral_term_get());
+    _bus_uart->print((Text)"\r\n");
+    #endif
+}
+
 void Bridge::pid_update(UByte mode) {
   //_debug_uart->string_print((Text)"[");
   static Byte last_left_speed = 0x80;
   static Byte last_right_speed = 0x80;
   //static Integer previous_left_encoder = 0;
 
-  if (_is_moving) {
-    // Read the encoders:
-    //_debug_uart->string_print((Text)"a");
+  // Get current encoder values for purpose of Pid loop
+  Integer left_encoder = _left_motor_encoder->encoder_get();
+  Integer right_encoder = _right_motor_encoder->encoder_get();
+  _left_motor_encoder->pid_encoder_set(left_encoder);
+  _right_motor_encoder->pid_encoder_set(right_encoder);
 
-    // Transfer the encoder values into the PID portion of the code.
-    // YES, this is a silly interface:
-    Integer left_encoder = _left_motor_encoder->encoder_get();
-    Integer right_encoder = _right_motor_encoder->encoder_get();
-    _left_motor_encoder->pid_encoder_set(left_encoder);
-    _right_motor_encoder->pid_encoder_set(right_encoder);
+
+  if (_is_moving) {
+    //_debug_uart->string_print((Text)"a");
 
     // Do the PID for each motor:
     //debug_uart->string_print((Text)"b");
 
-    if ((rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DISABLE_OK) &&
-        // Do normal 'm' command unless Kp are zero, then do direct pwm set
-        (_left_motor_encoder->proportional_get() == 0) && 
-        (_right_motor_encoder->proportional_get() == 0))  {
-        // bypass PID code if Kp are all zero
-    } else {
-        if (rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DEBUG) {
-          _host_uart->string_print((Text)"P\r\n");
-        }
-        _right_motor_encoder->do_pid();
-        _left_motor_encoder->do_pid();
-    } 
+    if (rab_sonar_->debug_flags_get() & DBG_FLAG_PID_DEBUG) {
+      _host_uart->string_print((Text)"P\r\n");
+    }
+
+    pid_debug_print_1((Logical)(1));
+
+    _left_motor_encoder->do_pid();
+    _right_motor_encoder->do_pid();
+
+    pid_debug_print_2();
 
     /* Set the motor speeds accordingly */
     //_debug_uart->string_print((Text)" l=");
@@ -118,6 +164,11 @@ void Bridge::pid_update(UByte mode) {
       _right_motor_encoder->reset();
     }
   }
+
+  // Save prior encoder settings for the next update
+  _left_motor_encoder->previous_encoder_set(left_encoder);
+  _right_motor_encoder->previous_encoder_set(right_encoder);
+
   //_debug_uart->string_print((Text)"]");
 }
 
@@ -276,8 +327,12 @@ void Bridge::setup(UByte test) {
   //pinMode(LED, OUTPUT);
   //digitalWrite(LED, HIGH);
 
-  // Initalize *avr_uart1* to talk to the bus:
+  // Initalize *avr_uart1* to talk to the bus or debug as desired
+  #ifdef BUS_LOKI_UART1_AS_DEBUG
+  _bus_uart->begin(16000000L, 115200L, (Character *)"8N1");
+  #else
   _bus_uart->begin(16000000L, 500000L, (Character *)"9N1");
+  #endif
 
   // Force the standby pin on the CAN transeciever to *LOW* to force it
   // into active mode:
@@ -334,7 +389,7 @@ void Bridge::loop(UByte mode) {
     case TEST_RAB_FREYA:
     case TEST_RAB_LOKI: {
       // Some constants:
-      static const UInteger PID_RATE = 10;			// Hz.
+      static const UInteger PID_RATE = 50;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
       static const UInteger MAXIMUM_ARGUMENTS = 5;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.

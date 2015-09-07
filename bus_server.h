@@ -50,6 +50,8 @@ class Bridge {
     void setup(UByte mode);
     void loop(UByte mode);
     void motor_speeds_set(Short left_speed, Short right_speed);
+    void pid_debug_print_1(Logical verbose);
+    void pid_debug_print_2();
   private:
     Bus_Slave *_bus_slave;
     AVR_UART *_bus_uart;
