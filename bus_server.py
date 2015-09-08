@@ -380,14 +380,23 @@ class Dead_Reckon:
 
 	# Load up *self*:
 	self.base_frame_ = base_frame
+	self.covariance_ = [
+	  0.2,  0.0,  0.0,  0.0,  0.0,  0.0,
+	  0.0,  0.2,  0.0,  0.0,  0.0,  0.0,
+	  0.0,  0.0,  0.2,  0.0,  0.0,  0.0,
+	  0.0,  0.0,  0.0,  0.2,  0.0,  0.0,
+	  0.0,  0.0,  0.0,  0.0,  0.2,  0.0,
+	  0.0,  0.0,  0.0,  0.0,  0.0,  0.2 ]
 	self.left_encoder_ = 0
 	self.right_encoder_ = 0
 	self.now_ = now
+	self.odom_ = Odometry()
 	self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
 	self.odom_broadcaster_ = TransformBroadcaster()
 	self.previous_left_encoder_ = 0
 	self.previous_now_ = now
 	self.previous_right_encoder_ = 0
+	self.quaternion_ = Quaternion()
 	self.th_ = 0.0	# Theta is the robot bearing
 	self.ticks_per_meter_ = ticks_per_meter
 	self.wheel_track_ = wheel_track
@@ -402,6 +411,7 @@ class Dead_Reckon:
 	assert isinstance(value, int)
 	#assert isinstance(value, rospy.Time)
 
+	# Load up *self*:
 	self.left_encoder_ += value
 	self.left_encoder_time_ = time
 
@@ -409,59 +419,61 @@ class Dead_Reckon:
 	""" *Dead_Reckon*: Publish the odometry topic if needed.
 	"""
 
-	# Grab some values out of *self*;
+	# Grab some values out of *self* (alphabetical order):
 	base_frame = self.base_frame_
-	previous_left_encoder = self.previous_left_encoder_
-	previous_right_encoder = self.previous_right_encoder_
+	covariance = self.covariance_
+	left_encoder = self.left_encoder_
+	odom = self.odom_
 	odom_broadcaster = self.odom_broadcaster_
 	odom_pub = self.odom_pub_
-	th = self.th_
+	previous_left_encoder = self.previous_left_encoder_
 	previous_now = self.previous_now_
+	previous_right_encoder = self.previous_right_encoder_
+	quaternion = self.quaternion_
+	right_encoder = self.right_encoder_
+	th = self.th_
 	ticks_per_meter = self.ticks_per_meter_
 	wheel_track = self.wheel_track_
 	x = self.x_
 	y = self.y_
 
-	left_enc = self.left_encoder_
-	right_enc = self.right_encoder_
-
 	# Compute *dt*:
 	delta_time = now - previous_now
 	dt = delta_time.to_sec()
 	
-	# Calculate odometry
-	dleft = float(left_enc - previous_left_encoder) / ticks_per_meter
-	dright = float(right_enc - previous_right_encoder) / ticks_per_meter
-	
+	# Calculate odometry intermediate values:
+	dleft = float(left_encoder - previous_left_encoder) / ticks_per_meter
+	dright = float(right_encoder - previous_right_encoder) / ticks_per_meter
 	dxy_average = (dright + dleft) / 2.0
 	dth = (dright - dleft) / wheel_track
 	vxy = dxy_average / dt
 	vth = dth / dt
 	    
+	# Update *x*, *y*, and *th* (theta):
 	if (dxy_average != 0.0):
-	    dx = cos(dth) * dxy_average
-	    dy = -sin(dth) * dxy_average
-	    x += (cos(th) * dx - sin(th) * dy)
-	    y += (sin(th) * dx + cos(th) * dy)
-    
-	if (dth != 0.0):
-            th += dth 
+	    dx =  dxy_average * cos(dth)
+	    dy = -dxy_average * sin(dth)
+	    cos_th = cos(th)
+	    sin_th = sin(th)
+	    x += (dx * cos_th - dy * sin_th)
+	    y += (dx * sin_th + dy * cos_th)
+	th += dth 
 
-	# Restore stuff into *self*:
-	self.previous_right_encoder_ = right_enc
-	self.previous_left_encoder_ = left_enc
-	self.th_ = th
+	# Restore stuff into *self* (alphabetical order):
+	self.previous_right_encoder_ = right_encoder
 	self.previous_now_ = now
+	self.previous_left_encoder_ = left_encoder
+	self.th_ = th
 	self.x_ = x
 	self.y_ = y
 
-	quaternion = Quaternion()
+	# Fill in the values for *quaternion* (quaternions are kind of magic):
 	quaternion.x = 0.0 
 	quaternion.y = 0.0
 	quaternion.z = sin(th / 2.0)
 	quaternion.w = cos(th / 2.0)
     
-	# Create the odometry transform frame broadcaster.
+	# Send the odometry transform frame:
 	odom_broadcaster.sendTransform(
 	  (x, y, 0),
 	  (quaternion.x, quaternion.y, quaternion.z, quaternion.w),
@@ -469,31 +481,19 @@ class Dead_Reckon:
 	  base_frame,
 	  "odom")
     
-	odom = Odometry()
+	# Fill in *odom* and publish it:
 	odom.header.frame_id = "odom"
 	odom.child_frame_id = base_frame
 	odom.header.stamp = now
 	odom.pose.pose.position.x = x
 	odom.pose.pose.position.y = y
-	odom.pose.pose.position.z = 0
+	odom.pose.pose.position.z = 0.0
 	odom.pose.pose.orientation = quaternion
-	odom.pose.covariance = \
-	  [0.2,  0,    0,     0,     0,     0,
-	   0,    0.2,  0,     0,     0,     0,
-	   0,    0,    0.2,   0,     0,     0,
-	   0,    0,    0,     0.2,   0,     0,
-	   0,    0,    0,     0,     0.2,   0,
-	   0,    0,    0,     0,     0,     0.2 ]
-	odom.twist.twist.linear.x = 0 #vxy
-	odom.twist.twist.linear.y = 0
-	odom.twist.twist.angular.z = 0 # vth
-	odom.twist.covariance = \
-	  [0.2,  0,    0,     0,     0,     0,
-	   0,    0.2,  0,     0,     0,     0,
-	   0,    0,    0.2,   0,     0,     0,
-	   0,    0,    0,     0.2,   0,     0,
-	   0,    0,    0,     0,     0.2,   0,
-	   0,    0,    0,     0,     0,     0.2]
+	odom.pose.covariance = covariance
+	odom.twist.twist.linear.x = vxy
+	odom.twist.twist.linear.y = 0.0
+	odom.twist.twist.angular.z = vth
+	odom.twist.covariance = covariance
 	odom_pub.publish(odom)
 
     def right_encoder_set(self, value, time):
@@ -504,6 +504,7 @@ class Dead_Reckon:
 	assert isinstance(value, int)
 	#assert isinstance(value, rospy.Time)
 
+	# Load up *self*:
 	self.right_encoder_ += value
 	self.right_encoder_time_ = time
 
