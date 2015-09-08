@@ -89,11 +89,17 @@ class Bus_Server:
 	self.port_name_ = rospy.get_param("~port", "/dev/ttyACM0")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
 
+	# Slurp in the PID parameters:
+	Kp = rospy.get_param("~Kp", 20)
+	Kd = rospy.get_param("~Kd", 3)
+	Ki = rospy.get_param("~Ki", 86)
+	Ko = rospy.get_param("~Ko", 300)
+	Ci = rospy.get_param("~Ci", 100)
+
 	# Set up *Dead_Reckon* object:
-	self.left_encoder_ = left_encoder = Encoder()
-	self.right_encoder_ = right_encoder = Encoder()
-	self.dead_reckon_ = dead_reckon = \
-	  Dead_Reckon(left_encoder, right_encoder, base_frame)
+	self.dead_reckon_ = dead_reckon = Dead_Reckon(base_frame)
+	self.left_encoder_ = left_encoder = Encoder_Sensor(dead_reckon, True)
+	self.right_encoder_ = right_encoder = Encoder_Sensor(dead_reckon, False)
 
 	# Overall loop rate: should be faster than fastest sensor rate
 	self.rate_ = rospy.Rate(self.poll_rate_)
@@ -108,7 +114,7 @@ class Bus_Server:
 	# Store stuff into *self*:
 	self.connection_ = connection
 	self.logger_ = logger
-	self.sensors_ = sensors = []
+	self.sensors_ = sensors = [left_encoder, right_encoder]
 
 	# Create all of the senosrs:
 	sensor_params = rospy.get_param("~sensors", dict({}))
@@ -124,7 +130,7 @@ class Bus_Server:
             
 	    # Dispatch on *sensor_type*:
 	    sensor = None
-            if sensor_type == "Sonar":
+	    if sensor_type == "Sonar":
 		# We have sonar, so grab the additional fields and create
 		# the *Sonar* object:
                 sensor = Sonar_Sensor(name,
@@ -144,7 +150,6 @@ class Bus_Server:
 		logger.warn(
 		  "Unrecognized sensor type '{0}'".format(sensor_type))
 
-	
 	# List all of the *sensors* in numerical order:
 	for sensor in sensors:
 	    if sensor != None:
@@ -165,14 +170,16 @@ class Bus_Server:
 	delta_poll_time = rospy.Duration(1.0 / float(self.poll_rate_))
 
 	Duration = rospy.Duration
-	now_routine = rospy.get_rostime
+	Time = rospy.Time
+	now_routine = rospy.Time.now
 	next_poll_time = now_routine()
+	assert isinstance(next_poll_time, Time)
 
-        # Start polling the sensors and base controller
+	# Start polling the sensors and base controller
 	robot_base_time = None
         while not rospy.is_shutdown():
 	    # Figure out if it is time to poll the sensor queue:
-            now = now_routine()
+	    now = now_routine()
 	    if now >= next_poll_time:
 		# Update *next_poll_time*:
 		next_poll_time += delta_poll_time
@@ -180,7 +187,7 @@ class Bus_Server:
 		# Grab the next back of sensor values from the sensor queue:
 		poll_values = connection.execute("q").split()
 		print("Poll: {0}".format(poll_values))
-	
+
 		# The first value in *poll_values* is the number of
 		# microseconds that have elapsed on the robot since
 		# the last time.  We need to add that to *robot_base_time*:
@@ -200,6 +207,7 @@ class Bus_Server:
 			except:
 			    # Something went wrong, so reset *robot_base_time*:
 			    robot_base_time = now_routine()
+		    #assert isinstance(robot_base_time, Time)
 
 		    #print("robot_base_time={0:d}.{1:09d}".
 		    # format(robot_base_time.secs,robot_base_time.nsecs))
@@ -209,30 +217,22 @@ class Bus_Server:
 		    for poll_value in poll_values[1:]:
 			#print("poll_value=", poll_value)
 			id_time_value = poll_value.split(':')
-			try:
-			    sensor_id = int(id_time_value[0])
-			    #print("sensor_id={0}".format(sensor_id))
-			    time = robot_base_time + \
-			      Duration(float(id_time_value[1]) / 1000000.0)
-			    #print("time={0:d}.{1:09d}".
-			    #  format(time.secs, time.nsecs))
-			    value = float(id_time_value[2]) / 1000.0 # mm=>M
-			    #print("value={0}".format(value))
-			    try:
-			        sensor = sensors[sensor_id]
-				sensor.value_set(value, time)
-			    except:
-				logger.warn("Sensor id {0} not defined".
-				  format(sendor_id))
-			except:
-			    logger.warn("Incorrect poll value '{0}'".
-			      format(poll_value))
+			sensor_id = int(id_time_value[0])
+			#print("sensor_id={0}".format(sensor_id))
+			time = robot_base_time + \
+			  Duration(float(id_time_value[1]) / 1000000.0)
+			#print("time={0:d}.{1:09d}".
+			#  format(time.secs, time.nsecs))
+			value = int(id_time_value[2])
+			#print("value={0}".format(value))
+			sensor = sensors[sensor_id]
+			sensor.value_set(value, time)
 
 		    # Deal with any dead reckoning publishing:
 		    dead_reckon.publish(now)
             
 	    # Sleep until next time:
-            rate.sleep()
+	    rate.sleep()
     
     def shut_down(self):
 	""" *Bus_Server*: Shut down the bus_server.
@@ -245,8 +245,8 @@ class Bus_Server:
 	    logger.info("Stopping the robot...")
 	    #self.cmd_vel_pub.Publish(Twist())
 	    rospy.sleep(2)
-        except:
-            pass
+	except:
+	    pass
 	logger.info("Shutting down Bus Server node...")
 
 	# Close the serial connection:
@@ -275,18 +275,14 @@ class Connection:
 	self.timeout_ = timeout
 
 	# Open the connection:
-        logger.info("Connecting to serial port '{0}' ...".format(port_name))
-        try:
-            self.port_ = port = Serial(port=port_name, baudrate=baud_rate,
-              bytesize=EIGHTBITS, parity=PARITY_NONE, stopbits=STOPBITS_ONE,
-              timeout=timeout, writeTimeout=timeout, xonxoff=False,
+	logger.info("Connecting to serial port '{0}' ...".format(port_name))
+	try:
+	    self.port_ = port = Serial(port=port_name, baudrate=baud_rate,
+	      bytesize=EIGHTBITS, parity=PARITY_NONE, stopbits=STOPBITS_ONE,
+	      timeout=timeout, writeTimeout=timeout, xonxoff=False,
 	      rtscts=False, dsrdtr=False)
 	    if not port.isOpen():
 	      logger.fatal("Serial port '{0}' is not open".format(port_name))
-
-            #while True:
-	    #	value = self.execute("b")
-	    #	print(value.strip())
 
 	    # Read the baud rate to make sure we are connected:
 	    # FIXME: We should a a firmware version number command!!!
@@ -299,7 +295,7 @@ class Connection:
 		    break
 	    if baud != baud_rate:
 		raise SerialException
-        except SerialException:
+	except SerialException:
 	    # If we get here, we die:
 	    logger.warn("Serial Exception:")
 	    logger.warn(sys.exc_info())
@@ -308,7 +304,7 @@ class Connection:
 	    logger.fatal("Cannot connect to robot!")
 
 	# Log that we established a connection:
-        logger.info("Serial connection at {0} baud".format(baud_rate))
+	logger.info("Serial connection at {0} baud".format(baud_rate))
 
     def baud_get(self):
         """ *Connection*: Return the baud rate from the connected platform.
@@ -321,29 +317,29 @@ class Connection:
 	    baud_rate = 0;
 	    self.logger_.warn(
 	      "Connection.baud_get: Got '{0}' instead baoud_rate".format(value))
-        return baud_rate
+	return baud_rate
 
     def close(self): 
-        """ *Connection*: Close the connection:
-        """
+	""" *Connection*: Close the connection:
+	"""
 
-        self.port_.close() 
+	self.port_.close() 
 
     def execute(self, command):
-        """ *Connection*: Thread safe execution of "command" on the Arduino
+	""" *Connection*: Thread safe execution of "command" on the Arduino
 	    returning a single integer value.
-        """
+	"""
 
 	#print("=>Connection.execute()")
-        #rospy.loginfo("Send command '{0}' to arduino".format(cmd))
+	#rospy.loginfo("Send command '{0}' to arduino".format(cmd))
 
 	# Make sure we are the only thread using the connection:
-        self.mutex_.acquire()
+	self.mutex_.acquire()
         
 	port = self.port_
 	try:
 	    # Make sure thare is no input left over from a previous command:
-            port.flushInput()
+	    port.flushInput()
 
 	    # Send *command* followed by a carriage return:
 	    port.write(command)
@@ -355,7 +351,7 @@ class Connection:
 	    print("Serial Exception Occurred")
 
 	# Release the lock for the next thread:
-        self.mutex_.release()
+	self.mutex_.release()
 
 	return value
 
@@ -364,35 +360,100 @@ class Dead_Reckon:
 	track of the robot base location and orientation.
     """
 
-    def __init__(self, left_encoder, right_encoder, base_frame):
+    def __init__(self, base_frame):
 	""" *Dead_Reckon*: Initialize an *Odometry* object to contain
 	"""
 
 	# Verify argument types:
-	assert isinstance(left_encoder, Encoder)
-	assert isinstance(right_encoder, Encoder)
 	assert isinstance(base_frame, str)
+
+	# Compute *ticks_per_meter*:
+        wheel_diameter = float(rospy.get_param("~wheel_diameter", .100))
+        wheel_track = float(rospy.get_param("~wheel_track", .200))
+        encoder_resolution = int(rospy.get_param("~encoder_resolution", 1000))
+        gear_reduction = float(rospy.get_param("~gear_reduction", 1.0))
+        ticks_per_meter = \
+	  float(encoder_resolution) * gear_reduction  / (wheel_diameter * PI)
+
+	# Get the starting time *now*:
+	now = rospy.Time.now()
 
 	# Load up *self*:
 	self.base_frame_ = base_frame
-	self.left_encoder_ = left_encoder
-	self.right_encoder_ = right_encoder
-        self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
-        self.odom_broadcaster_ = TransformBroadcaster()
-	self.th_ = 0.0	# Theta
+	self.left_encoder_ = 0
+	self.right_encoder_ = 0
+	self.now_ = now
+	self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
+	self.odom_broadcaster_ = TransformBroadcaster()
+	self.previous_left_encoder_ = 0
+	self.previous_now_ = now
+	self.previous_right_encoder_ = 0
+	self.th_ = 0.0	# Theta is the robot bearing
+	self.ticks_per_meter_ = ticks_per_meter
+	self.wheel_track_ = wheel_track
 	self.x_ = 0.0
 	self.y_ = 0.0
+
+    def left_encoder_set(self, value, time):
+	""" *Dead_Reckon*: Set the left encoder to *value* and *time*.
+	"""
+
+	# Verify argument types:
+	assert isinstance(value, int)
+	#assert isinstance(value, rospy.Time)
+
+	self.left_encoder_ += value
+	self.left_encoder_time_ = time
 
     def publish(self, now):
 	""" *Dead_Reckon*: Publish the odometry topic if needed.
 	"""
+
 	# Grab some values out of *self*;
 	base_frame = self.base_frame_
+	previous_left_encoder = self.previous_left_encoder_
+	previous_right_encoder = self.previous_right_encoder_
 	odom_broadcaster = self.odom_broadcaster_
 	odom_pub = self.odom_pub_
 	th = self.th_
+	previous_now = self.previous_now_
+	ticks_per_meter = self.ticks_per_meter_
+	wheel_track = self.wheel_track_
 	x = self.x_
 	y = self.y_
+
+	left_enc = self.left_encoder_
+	right_enc = self.right_encoder_
+
+	# Compute *dt*:
+	delta_time = now - previous_now
+	dt = delta_time.to_sec()
+	
+	# Calculate odometry
+	dleft = float(left_enc - previous_left_encoder) / ticks_per_meter
+	dright = float(right_enc - previous_right_encoder) / ticks_per_meter
+	
+	dxy_average = (dright + dleft) / 2.0
+	dth = (dright - dleft) / wheel_track
+	vxy = dxy_average / dt
+	vth = dth / dt
+	    
+	if (dxy_average != 0.0):
+	    dx = cos(dth) * dxy_average
+	    dy = -sin(dth) * dxy_average
+	    x += (cos(th) * dx - sin(th) * dy)
+	    y += (sin(th) * dx + cos(th) * dy)
+    
+	if (dth != 0.0):
+            th += dth 
+
+	# Restore stuff into *self*:
+	self.previous_right_encoder_ = right_enc
+	self.previous_left_encoder_ = left_enc
+	self.th_ = th
+	self.previous_now_ = now
+	self.x_ = x
+	self.y_ = y
 
 	quaternion = Quaternion()
 	quaternion.x = 0.0 
@@ -402,7 +463,7 @@ class Dead_Reckon:
     
 	# Create the odometry transform frame broadcaster.
 	odom_broadcaster.sendTransform(
- 	  (x, y, 0),
+	  (x, y, 0),
 	  (quaternion.x, quaternion.y, quaternion.z, quaternion.w),
 	  now,
 	  base_frame,
@@ -435,21 +496,16 @@ class Dead_Reckon:
 	   0,    0,    0,     0,     0,     0.2]
 	odom_pub.publish(odom)
 
-class Encoder:
-    """ *Encoder*: An encoder object represents motor encoder.
-    """
-
-    def __init__(self):
-	""" *Encoder*: Initialize an *Encoder* object
+    def right_encoder_set(self, value, time):
+	""" *Dead_Reckon*: Set the right encoder to *value* and *time*.
 	"""
 
-	pass
+	# Verify argument types:
+	assert isinstance(value, int)
+	#assert isinstance(value, rospy.Time)
 
-    def value_set(self, value, time):
-	""" *Encoder*: Set the encoder *value* and *time*:
-	"""
-
-	pass
+	self.right_encoder_ += value
+	self.right_encoder_time_ = time
 
 class Logger:
     def __init__(self, verbose=True):
@@ -485,7 +541,8 @@ class Sensor:
     """
 
     NO_TYPE = 0
-    SONAR_TYPE = 1
+    ENCODER_TYPE = 1
+    SONAR_TYPE = 2
 
     def __init__(self, name, sensor_type, sensor_id, frame_id):
 	""" *Sensor*: Initialize a *Sensor* object to contain *name*,
@@ -511,6 +568,39 @@ class Sensor:
 
 	return "name:'{0}' type:{1} id:{2} frame_id:'{3}'".format(
 	  self.name, self.sensor_type, self.sensor_id, self.frame_id)
+
+class Encoder_Sensor(Sensor):
+    """ *Encoder_Sensor*: An encoder sensor object represents motor encoder.
+    """
+
+    def __init__(self, dead_reckon, is_left):
+	""" *Encoder_Sensor*: Initialize an *Encoder* object
+	"""
+
+	# Verify routine arguments:
+	assert isinstance(dead_reckon, Dead_Reckon)
+	assert isinstance(is_left, bool)
+
+	name = "right_encoder"
+	sensor_id = 1
+	if is_left:
+	    name = "left_encoder"
+	    sensor_id = 0
+	frame_id = "none"
+
+	Sensor.__init__(self, name, Sensor.ENCODER_TYPE, sensor_id, frame_id)
+	self.dead_reckon_ = dead_reckon
+	self.is_left_ = is_left
+
+    def value_set(self, value, time):
+	""" *Encoder_Sensor*: Set the appropiate encoder to *value* and *time*:
+	"""
+
+	dead_reckon = self.dead_reckon_
+	if self.is_left_:
+	    dead_reckon.left_encoder_set(value, time)
+	else:
+	    dead_reckon.right_encoder_set(value, time)
 
 class Sonar_Sensor(Sensor):
     def __init__(self, name, sensor_type, sensor_id, frame_id,
@@ -538,7 +628,7 @@ class Sonar_Sensor(Sensor):
 
 	# Initialize *msg* a little more:
 	msg.header.frame_id = frame_id
-        msg.radiation_type = Range.ULTRASOUND
+	msg.radiation_type = Range.ULTRASOUND
 	msg.field_of_view = field_of_view
 	msg.min_range = min_range
 	msg.max_range = max_range
@@ -559,9 +649,16 @@ class Sonar_Sensor(Sensor):
 	    and publish it.
 	"""
 
+	# Verify routine arguments:
+	assert isinstance(value, int)
+	#assert isinstance(time, rospy.Time)
+
+	# Convert from integer millimeters to float meters:
+	range = float(value) / 1000.0
+
 	# Load *value* and *time* into *msg*:
 	msg = self.msg_
-	msg.range = value
+	msg.range = range
 	msg.header.stamp = time
 
 	# Publish *msg*:
@@ -1484,44 +1581,7 @@ class XBaseController:
     def poll(self):
         now = rospy.Time.now()
         if now > self.t_next:
-            # Read the encoders
-            try:
-                left_enc, right_enc = self.arduino.get_encoder_counts()
-            except:
-                self.bad_encoder_count += 1
-                rospy.logerr("Encoder exception count: " + str(self.bad_encoder_count))
-                return
-                            
-            dt = now - self.then
-            self.then = now
-            dt = dt.to_sec()
-            
-            # calculate odometry
-            if self.enc_left == None:
-                dright = 0
-                dleft = 0
-            else:
-                dright = (right_enc - self.enc_right) / self.ticks_per_meter
-                dleft = (left_enc - self.enc_left) / self.ticks_per_meter
-
-            self.enc_right = right_enc
-            self.enc_left = left_enc
-            
-            dxy_ave = (dright + dleft) / 2.0
-            dth = (dright - dleft) / self.wheel_track
-            vxy = dxy_ave / dt
-            vth = dth / dt
-                
-            if (dxy_ave != 0):
-                dx = cos(dth) * dxy_ave
-                dy = -sin(dth) * dxy_ave
-                self.x += (cos(self.th) * dx - sin(self.th) * dy)
-                self.y += (sin(self.th) * dx + cos(self.th) * dy)
-    
-            if (dth != 0):
-                self.th += dth 
-    
-            quaternion = Quaternion()
+	    quaternion = Quaternion()
             quaternion.x = 0.0 
             quaternion.y = 0.0
             quaternion.z = sin(self.th / 2.0)
