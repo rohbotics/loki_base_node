@@ -106,12 +106,12 @@ void Bridge::pid_update(UByte mode) {
       _host_uart->string_print((Text)"P\r\n");
     }
 
-    pid_debug_print_1((Logical)(1));
+    pid_debug_print_1((Logical)(0));    // Debug to bus_uart if enabled
 
     _left_motor_encoder->do_pid();
     _right_motor_encoder->do_pid();
 
-    pid_debug_print_2();
+    pid_debug_print_2();                // Debug to bus_uart if enabled
 
     /* Set the motor speeds accordingly */
     //_debug_uart->string_print((Text)" l=");
