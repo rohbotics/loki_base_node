@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (c) 2015 by Wayne C. Gramlich.  All rights reserved.
+
 """
     A ROS Node for the Arduino microcontroller
     
@@ -80,14 +82,18 @@ class Bus_Server:
 	rospy.on_shutdown(self.shut_down)
 
 	# Grab some parameter values from the ROS parameter server:
-	self.base_frame_ = rospy.get_param("~base_frame", 'base_link')
+	self.base_frame_ = base_frame = \
+	  rospy.get_param("~base_frame", 'base_link')
 	self.baud_rate_ = int(rospy.get_param("~baud", 57600))
 	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
 	self.port_name_ = rospy.get_param("~port", "/dev/ttyACM0")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
-	self.x_ = 0.0
-	self.y_ = 0.0
-	self.th_ = 0.0
+
+	# Set up *Dead_Reckon* object:
+	self.left_encoder_ = left_encoder = Encoder()
+	self.right_encoder_ = right_encoder = Encoder()
+	self.dead_reckon_ = dead_reckon = \
+	  Dead_Reckon(left_encoder, right_encoder, base_frame)
 
 	# Overall loop rate: should be faster than fastest sensor rate
 	self.rate_ = rospy.Rate(self.poll_rate_)
@@ -103,8 +109,6 @@ class Bus_Server:
 	self.connection_ = connection
 	self.logger_ = logger
 	self.sensors_ = sensors = []
-        self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
-        self.odom_broadcaster_ = TransformBroadcaster()
 
 	# Create all of the senosrs:
 	sensor_params = rospy.get_param("~sensors", dict({}))
@@ -128,16 +132,18 @@ class Bus_Server:
 		  field_of_view = params.pop("field_of_view", .43632347),
 		  min_range = params.pop('min_range', 0.02),
 		  max_range = params.pop('max_range', 100.00))
-		assert sensor.sensor_id == sensor_id
+
+		# Insert *sensor* into *sensors* infilling with empty slots
+		# with *None*:
+		if sensor_id >=0:
+		    assert isinstance(sensor, Sensor)
+		    while (len(sensors) <= sensor_id):
+			sensors.append(None)
+		    sensors[sensor_id] = sensor
 	    else:
 		logger.warn(
 		  "Unrecognized sensor type '{0}'".format(sensor_type))
 
-	    if id >=0:
-		assert isinstance(sensor, Sensor)
-		while (len(sensors) <= sensor_id):
-		    sensors.append(None)
-		sensors[sensor_id] = sensor
 	
 	# List all of the *sensors* in numerical order:
 	for sensor in sensors:
@@ -150,12 +156,11 @@ class Bus_Server:
 
 	# Grab values from *self*:
 	base_frame = self.base_frame_
-	logger = self.logger_
 	connection = self.connection_
+	dead_reckon = self.dead_reckon_
+	logger = self.logger_
 	rate = self.rate_
 	sensors = self.sensors_
-	odom_broadcaster = self.odom_broadcaster_
-	odom_pub = self.odom_pub_
 
 	delta_poll_time = rospy.Duration(1.0 / float(self.poll_rate_))
 
@@ -223,49 +228,8 @@ class Bus_Server:
 			    logger.warn("Incorrect poll value '{0}'".
 			      format(poll_value))
 
-		    x = self.x_
-		    y = self.y_
-                    th = self.th_
-		    quaternion = Quaternion()
-		    quaternion.x = 0.0 
-		    quaternion.y = 0.0
-		    quaternion.z = sin(th / 2.0)
-		    quaternion.w = cos(th / 2.0)
-    
-		    # Create the odometry transform frame broadcaster.
-		    odom_broadcaster.sendTransform(
- 		      (x, y, 0),
-		      (quaternion.x, quaternion.y, quaternion.z, quaternion.w),
-		      now,
-		      base_frame,
-		      "odom")
-    
-		    odom = Odometry()
-		    odom.header.frame_id = "odom"
-		    odom.child_frame_id = base_frame
-		    odom.header.stamp = now
-		    odom.pose.pose.position.x = x
-		    odom.pose.pose.position.y = y
-		    odom.pose.pose.position.z = 0
-		    odom.pose.pose.orientation = quaternion
-		    odom.pose.covariance = \
-		      [0.2,  0,    0,     0,     0,     0,
-		       0,    0.2,  0,     0,     0,     0,
-		       0,    0,    0.2,   0,     0,     0,
-		       0,    0,    0,     0.2,   0,     0,
-		       0,    0,    0,     0,     0.2,   0,
-		       0,    0,    0,     0,     0,     0.2 ]
-		    odom.twist.twist.linear.x = 0 #vxy
-		    odom.twist.twist.linear.y = 0
-		    odom.twist.twist.angular.z = 0 # vth
-		    odom.twist.covariance = \
-		      [0.2,  0,    0,     0,     0,     0,
-                       0,    0.2,  0,     0,     0,     0,
-                       0,    0,    0.2,   0,     0,     0,
-                       0,    0,    0,     0.2,   0,     0,
-                       0,    0,    0,     0,     0.2,   0,
-                       0,    0,    0,     0,     0,     0.2]
-		    odom_pub.publish(odom)
+		    # Deal with any dead reckoning publishing:
+		    dead_reckon.publish(now)
             
 	    # Sleep until next time:
             rate.sleep()
@@ -395,6 +359,98 @@ class Connection:
 
 	return value
 
+class Dead_Reckon:
+    """ *Dead_Reckon*: This class uses a pair of *Encoder* object to keep
+	track of the robot base location and orientation.
+    """
+
+    def __init__(self, left_encoder, right_encoder, base_frame):
+	""" *Dead_Reckon*: Initialize an *Odometry* object to contain
+	"""
+
+	# Verify argument types:
+	assert isinstance(left_encoder, Encoder)
+	assert isinstance(right_encoder, Encoder)
+	assert isinstance(base_frame, str)
+
+	# Load up *self*:
+	self.base_frame_ = base_frame
+	self.left_encoder_ = left_encoder
+	self.right_encoder_ = right_encoder
+        self.odom_pub_ = rospy.Publisher('odom', Odometry, queue_size=5)
+        self.odom_broadcaster_ = TransformBroadcaster()
+	self.th_ = 0.0	# Theta
+	self.x_ = 0.0
+	self.y_ = 0.0
+
+    def publish(self, now):
+	""" *Dead_Reckon*: Publish the odometry topic if needed.
+	"""
+	# Grab some values out of *self*;
+	base_frame = self.base_frame_
+	odom_broadcaster = self.odom_broadcaster_
+	odom_pub = self.odom_pub_
+	th = self.th_
+	x = self.x_
+	y = self.y_
+
+	quaternion = Quaternion()
+	quaternion.x = 0.0 
+	quaternion.y = 0.0
+	quaternion.z = sin(th / 2.0)
+	quaternion.w = cos(th / 2.0)
+    
+	# Create the odometry transform frame broadcaster.
+	odom_broadcaster.sendTransform(
+ 	  (x, y, 0),
+	  (quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+	  now,
+	  base_frame,
+	  "odom")
+    
+	odom = Odometry()
+	odom.header.frame_id = "odom"
+	odom.child_frame_id = base_frame
+	odom.header.stamp = now
+	odom.pose.pose.position.x = x
+	odom.pose.pose.position.y = y
+	odom.pose.pose.position.z = 0
+	odom.pose.pose.orientation = quaternion
+	odom.pose.covariance = \
+	  [0.2,  0,    0,     0,     0,     0,
+	   0,    0.2,  0,     0,     0,     0,
+	   0,    0,    0.2,   0,     0,     0,
+	   0,    0,    0,     0.2,   0,     0,
+	   0,    0,    0,     0,     0.2,   0,
+	   0,    0,    0,     0,     0,     0.2 ]
+	odom.twist.twist.linear.x = 0 #vxy
+	odom.twist.twist.linear.y = 0
+	odom.twist.twist.angular.z = 0 # vth
+	odom.twist.covariance = \
+	  [0.2,  0,    0,     0,     0,     0,
+	   0,    0.2,  0,     0,     0,     0,
+	   0,    0,    0.2,   0,     0,     0,
+	   0,    0,    0,     0.2,   0,     0,
+	   0,    0,    0,     0,     0.2,   0,
+	   0,    0,    0,     0,     0,     0.2]
+	odom_pub.publish(odom)
+
+class Encoder:
+    """ *Encoder*: An encoder object represents motor encoder.
+    """
+
+    def __init__(self):
+	""" *Encoder*: Initialize an *Encoder* object
+	"""
+
+	pass
+
+    def value_set(self, value, time):
+	""" *Encoder*: Set the encoder *value* and *time*:
+	"""
+
+	pass
+
 class Logger:
     def __init__(self, verbose=True):
 	""" *Logger*: Initialize *self* with *verbose*.
@@ -442,6 +498,7 @@ class Sensor:
 	assert isinstance(sensor_id, int)
 	assert isinstance(frame_id, str)
 
+	# Load up *self*:
 	self.name = name
 	self.sensor_type = sensor_type
 	self.sensor_id = sensor_id
