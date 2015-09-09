@@ -3,9 +3,69 @@
 # Copyright (c) 2015 by Wayne C. Gramlich.  All rights reserved.
 
 """
-    This is a simpler replacement for the ROS Arduino Bridge used
-    by the Ubiquity Robotics robot platforms.  It supports only the
-    sensors provided by the Ubiquity Robotics platforms for now.
+
+After some discussions with an ex-Willow Garage person (Tony Pratkanis),
+it became clear that we were not collecting accurate enough time stamps
+from our sonar sensors.  The purpose of the code is to obtain and manage
+better sensor timestamps.
+
+In short, we are using the sonar sensors as a poor mans Lidar.  This
+is because 16 sonars costs approximately $16, whereas a Lidar costs
+much more than that.  The sonars do not provide enough information to
+run a SLAM algorithm, but they do provide enough information for local
+obstacle avoidance.
+
+The ROS node that takes sensor data like Lidar and Sonar and
+converts into a local cost map is called `navigation_layers`.
+We are using the `range_sensor_layer` plugin for `navigation_layers`
+because we are using sonars.  The `navigation_layers` package takes
+the sonar information and generates a local cost map that can be used
+by the robot to avoid running into things.
+
+Since sonars are significantly slower than a Lidar, there is much more
+sensor skew going on as the robot moves.  The `navigation_layers`
+package uses the range sensor timestamps, to interpolate where the
+platform was when the sensor was read.  This helps deal with sensor
+skew and provides a more accurate local cost map.
+
+Unfortunately, the sonar timestamps captured by the ROS Arduino Bridge
+are very inaccurate.  This results in a very messy local cost map.
+After a looking at what needed to be done and the current state of
+the ROS Arduino Bridge code (which is already severely hacked code),
+we came to the conclusion that it was time to write some new code
+from scratch.
+
+The primary command that is used in the code below is the "sensor queue
+read" command which is implemented a single letter "q":
+
+        q
+
+The command returns the following:
+
+        {dt} {sensor1} {sensor2} ....
+
+where:
+
+* {dt} is the number of microseconds elapsed since the last "q" command, and
+* {sensorI} is a sensor reading.
+
+Each sensor reading is a tripple of number that has the following form:
+
+        {id}:{dt}:{value}
+
+where:
+
+* {id} is the sensor id (e.g. 0, 7, 17),
+* {dt} is the microsecond time offset from current time (usually <=0, and
+* {value} is the sensor value.
+
+Since we generate a stream of "q" commands at 50 times a second and the sonars
+are maintaining microsecond level timing, the sonar times are quite accurate
+with relatively low latency.
+
+It should be mentioned, that the "q" command is used to read the encoders
+as well.  This results in better odometry.
+
 """
 
 # Put all of the imports into alphabetical order:
