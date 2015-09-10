@@ -183,13 +183,41 @@ class Bus_Server:
 	    # Dispatch on *sensor_type*:
 	    sensor = None
 	    if sensor_type == "Sonar":
+		# Grab fields:
+		field_of_view = params.pop("field_of_view", .43632347)
+		min_range = params.pop("min_range", 0.02)
+		max_range = params.pop("max_range", 100.00)
+		class_name = params.pop("class", "Unknown")
+		left_id = params.pop("left_id", "Unknown")
+		right_id = params.pop("right_id", "Unknown")
+
 		# We have sonar, so grab the additional fields and create
 		# the *Sonar* object:
 		sensor = Sonar_Sensor(name,
 		  Sensor.SONAR_TYPE, sensor_id, frame_id,
-		  field_of_view = params.pop("field_of_view", .43632347),
-		  min_range = params.pop('min_range', 0.02),
-		  max_range = params.pop('max_range', 100.00))
+		  field_of_view = field_of_view,
+		  min_range = min_range,
+		  max_range = max_range)
+
+		sonar_class = -1
+		if class_name.lower() == "off":
+		    sonar_class = 0	# From Sonar.h
+		elif class_name.lower() == "back":
+		    sonar_class = 1	# From Sonar.h
+		elif class_name.lower() == "front":
+		    sonar_class = 2	# From Sonar.h
+		elif class_name.lower() == "side":
+		    sonar_class = 3	# From Sonar.h
+		else:
+		    logger.warn(
+		      "Sonar class '{0}' not recognized".format(class_name))
+
+		if sonar_class >= 0:
+		    command = "s {0} {1} {2}".format(sonar_class,
+		      left_id, right_id).strip()
+		    result = connection.execute(command).strip()
+		    logger.info("Sent '{0}' and got '{1}'".
+		      format(command, result))
 
 		# Insert *sensor* into *sensors* infilling with empty slots
 		# with *None*:

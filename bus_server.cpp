@@ -391,7 +391,7 @@ void Bridge::loop(UByte mode) {
       // Some constants:
       static const UInteger PID_RATE = 50;			// Hz.
       static const UInteger PID_INTERVAL = 1000 / PID_RATE;	// mSec.
-      static const UInteger MAXIMUM_ARGUMENTS = 5;
+      static const UInteger MAXIMUM_ARGUMENTS = 6;
       //static const UInteger AUTO_STOP_INTERVAL = 2000;	// mSec.
 
       // Some variables that need to be unchanged through each loop iteration:
@@ -532,6 +532,19 @@ void Bridge::loop(UByte mode) {
 	      _host_uart->string_print((Text)"OK\r\n");
 	      break;
 	    }
+	    case 'o': {      // read a sensor directly inline in units of mm
+              // ROS reading of 'pins' or sensors.  ("o 3"):
+              // We will return ultrasonic sensor readings for one unit 
+              // from the background sampled array of data measured earlier
+	      UByte sonarUnit = (UByte)arguments[0];
+
+              // Read sensor on Loki platform
+              Short distInMm = rab_sonar_->ping_get(sonarUnit);
+	      _host_uart->integer_print((int)distInMm);
+	      _host_uart->string_print((Text)" mm\r\n");
+
+	      break;
+	    }
 	    case 'p': {
 	      // Read (ping) sonar requested  ("p 5"): 
 	      Integer sonar_unit = arguments[0];
@@ -551,19 +564,6 @@ void Bridge::loop(UByte mode) {
                 }
 	        _host_uart->string_print((Text)"\r\n");
               }
-	      break;
-	    }
-	    case 'o': {      // read a sensor directly inline in units of mm
-              // ROS reading of 'pins' or sensors.  ("o 3"):
-              // We will return ultrasonic sensor readings for one unit 
-              // from the background sampled array of data measured earlier
-	      UByte sonarUnit = (UByte)arguments[0];
-
-              // Read sensor on Loki platform
-              Short distInMm = rab_sonar_->ping_get(sonarUnit);
-	      _host_uart->integer_print((int)distInMm);
-	      _host_uart->string_print((Text)" mm\r\n");
-
 	      break;
 	    }
 	    case 'q': {
@@ -636,6 +636,21 @@ void Bridge::loop(UByte mode) {
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
+	      break;
+	    }
+	    case 's': {
+	      // Sonar configure ("s sonar_id class left_id right_id"):
+	      
+	      if (arguments_index == 3) {
+		UByte sonar_id = arguments[0];
+		UByte sonar_class = arguments[1];
+		Byte left_id = arguments[2];
+		Byte right_id = arguments[3];
+		rab_sonar_->configure(sonar_id, sonar_class, left_id, right_id);
+		_host_uart->string_print((Text)"OK\r\n");
+	      } else {
+		_host_uart->string_print((Text)"Bad s command\r\n");
+	      }
 	      break;
 	    }
 	    case 'u': {
