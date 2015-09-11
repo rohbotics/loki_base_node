@@ -111,7 +111,7 @@ class Bus_Server:
 	  rospy.get_param("~base_frame", 'base_link')
 	self.baud_rate_ = int(rospy.get_param("~baud", 57600))
 	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
-	self.port_name_ = rospy.get_param("~port", "/dev/ttyACM0")
+	self.port_name_ = port_name = rospy.get_param("~port", "/dev/ttyACM0")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
 
 	# Grab some parameters for dead reckoning:
@@ -149,7 +149,7 @@ class Bus_Server:
 
 	# Open the serial *connection*:
 	self.connection_ = connection = \
-	  Connection(logger, "/dev/ttyUSB0", 115200, self.timeout_)
+	  Connection(logger, port_name, 115200, self.timeout_)
 
 	# Slurp in the PID parameters:
 	Kp = rospy.get_param("~Kp", 20)
@@ -320,7 +320,8 @@ class Bus_Server:
 		    logger.warn("Missing time delta from 'q' command")
 		else:
 		    # We have the microseonds value in *poll_values[0]*:
-		    if robot_base_time == None:
+		    #if robot_base_time == None:
+		    if True:
 			# This is the first time, so we just use *now()*:
 			robot_base_time = now_routine()
 		    else:
