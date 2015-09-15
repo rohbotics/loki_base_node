@@ -1,4 +1,5 @@
 // Copyright (c) 2014-2015 by Wayne C. Gramlich.  All rights reserved.
+// Copyright (c) 2015 by Mark Johnston.  All rights reserved.
 
 // http://brettbeauregard.com/blog/2011/04/
 //  improving-the-beginner%E2%80%99s-pid-initialization/
@@ -8,10 +9,8 @@
 #include "bus_server.h"
 #include "RAB_Sonar.h"
 
-
 #define PID_OVERRIDE_FACTOR 	 (15)   // Factor used if in PID override mode
 #define PID_OVERRIDE_OFFSET      (30)   // Offset to add AFTER PID scaling
-
 
 // *Bridge* methods:
 
@@ -40,9 +39,11 @@ void Bridge::pid_debug_print_1(Logical verbose)
     #ifdef BUS_LOKI_UART1_AS_DEBUG
     _bus_uart->print((Text)"Pid R: ");
 
-    if (verbose)   {    // Print minimal unless in serious debug mode as it takes time
+    // Print minimal unless in serious debug mode as it takes time
+    if (verbose) {
       _bus_uart->print((Text)" Kp ");
-      _bus_uart->integer_print((Integer)_right_motor_encoder->proportional_get());
+      _bus_uart->integer_print(
+	(Integer)_right_motor_encoder->proportional_get());
       _bus_uart->print((Text)" Ki ");
       _bus_uart->integer_print((Integer)_right_motor_encoder->integral_get());
       _bus_uart->print((Text)" Kd ");
@@ -50,17 +51,21 @@ void Bridge::pid_debug_print_1(Logical verbose)
       _bus_uart->print((Text)" sPwm ");
       _bus_uart->integer_print((Integer)_right_motor_encoder->output_get());
       _bus_uart->print((Text)" pPwm ");
-      _bus_uart->integer_print((Integer)_right_motor_encoder->previous_pwm_get());
+      _bus_uart->integer_print(
+	(Integer)_right_motor_encoder->previous_pwm_get());
       _bus_uart->print((Text)" enc ");
       _bus_uart->integer_print((Integer)_right_motor_encoder->encoder_get());
       _bus_uart->print((Text)" pEnc ");
-      _bus_uart->integer_print((Integer)_right_motor_encoder->previous_encoder_get());
+      _bus_uart->integer_print(
+       (Integer)_right_motor_encoder->previous_encoder_get());
       _bus_uart->print((Text)" pIT ");
-      _bus_uart->integer_print((Integer)_right_motor_encoder->integral_term_get());
+      _bus_uart->integer_print(
+       (Integer)_right_motor_encoder->integral_term_get());
     }
 
     _bus_uart->print((Text)" tgt ");
-    _bus_uart->integer_print((Integer)_right_motor_encoder->target_ticks_per_frame_get());
+    _bus_uart->integer_print(
+       (Integer)_right_motor_encoder->target_ticks_per_frame_get());
     #endif
 }
 
@@ -78,7 +83,8 @@ void Bridge::pid_debug_print_2()
     _bus_uart->print((Text)" Rate ");
     _bus_uart->integer_print((Integer)_right_motor_encoder->rate_get());
     _bus_uart->print((Text)" fIT ");
-    _bus_uart->integer_print((Integer)_right_motor_encoder->integral_term_get());
+    _bus_uart->integer_print(
+     (Integer)_right_motor_encoder->integral_term_get());
     _bus_uart->print((Text)"\r\n");
     #endif
 }
@@ -527,6 +533,21 @@ void Bridge::loop(UByte mode) {
 	      } else {
 		motor_speeds_set(0, 0);
 	      }
+	      // Compute *direction* with which corresponds to the
+	      // the sum of *left_speed* and *right_speed* but reduced
+	      // down to a single signed byte:
+	      if (left_speed > 63) {
+		left_speed = 63;
+	      } else if (left_speed < -63) {
+		left_speed = -63;
+	      }
+ 	      if (right_speed > 63) {
+		right_speed = 63;
+	      } else if (right_speed < -63) {
+		right_speed = -63;
+	      }
+	      Byte direction = (Byte)left_speed + (Byte)right_speed;
+	      rab_sonar_->direction_set(direction);
 
 	      // Print the usual "OK" result:
 	      _host_uart->string_print((Text)"OK\r\n");
@@ -675,15 +696,20 @@ void Bridge::loop(UByte mode) {
               if ((arguments_index < 5) ||
                   (rab_sonar_->debug_flags_get() & DBG_FLAG_PARAMETER_SETUP)) {
 	        _host_uart->string_print((Text)"Kp ");
-	        _debug_uart->integer_print( _left_motor_encoder->proportional_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->proportional_get());
 	        _host_uart->string_print((Text)"  Kd ");
-	        _debug_uart->integer_print( _left_motor_encoder->derivative_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->derivative_get());
 	        _host_uart->string_print((Text)"  Ki ");
-	        _debug_uart->integer_print( _left_motor_encoder->integral_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->integral_get());
 	        _host_uart->string_print((Text)"  Ko ");
-	        _debug_uart->integer_print( _left_motor_encoder->denominator_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->denominator_get());
 	        _host_uart->string_print((Text)"  Ci ");
-	        _debug_uart->integer_print( _left_motor_encoder->integral_cap_get());
+	        _debug_uart->integer_print(
+		 _left_motor_encoder->integral_cap_get());
 	        _host_uart->string_print((Text)"\r\n");
               }
 

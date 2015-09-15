@@ -213,8 +213,8 @@ class Bus_Server:
 		      "Sonar class '{0}' not recognized".format(class_name))
 
 		if sonar_class >= 0:
-		    command = "s {0} {1} {2}".format(sonar_class,
-		      left_id, right_id).strip()
+		    command = "s {0} {1} {2} {3}".format(sensor_id,
+		      sonar_class, left_id, right_id).strip()
 		    result = connection.execute(command).strip()
 		    logger.info("Sent '{0}' and got '{1}'".
 		      format(command, result))
