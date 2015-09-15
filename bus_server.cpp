@@ -664,7 +664,7 @@ void Bridge::loop(UByte mode) {
 	      
 	      if (arguments_index == 3) {
 		UByte sonar_id = arguments[0];
-		UByte sonar_class = arguments[1];
+		Sonar_Class sonar_class = (Sonar_Class)arguments[1];
 		Byte left_id = arguments[2];
 		Byte right_id = arguments[3];
 		rab_sonar_->configure(sonar_id, sonar_class, left_id, right_id);
