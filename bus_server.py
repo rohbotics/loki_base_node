@@ -111,8 +111,16 @@ class Bus_Server:
 	  rospy.get_param("~base_frame", 'base_link')
 	self.baud_rate_ = int(rospy.get_param("~baud", 57600))
 	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
-	self.port_name_ = port_name = rospy.get_param("~port", "/dev/ttyACM0")
+	self.port_name_ = port_name = rospy.get_param("~port", "")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
+
+	# Probe for standard ports:
+	if port_name == "":
+	    if os.path.exists("/dev/ttyACM0"):
+		port_name = "/dev/ttyACM0"
+	    elif os.path.exists("/dev/ttyUSB0"):
+		port_name = "/dev/ttyUSB0"
+	    self.port_name_ = port_name
 
 	# Grab some parameters for dead reckoning:
 	self.encoder_resolution_ = encoder_resolution = \
