@@ -100,13 +100,46 @@ class Sonar_Statistics:
 		# Update *next_poll_time*:
 		next_poll_time += delta_poll_time
 
-	    summary = ""
-	    for index in range(len(counts)):
-	        summary += " {0:3d}:{1:02d}".format(counts[index], index)
-		counts[index] = 0
+	    # Print out a histogram of *counts*:
+
+	    # Step 1: compute *counts_maximum* and *counts_total*:
 	    mutex.acquire()
-	    print(summary)
-	    mutex.release()
+	    counts_maximum = 0
+	    counts_total = 0
+	    for count in counts:
+		counts_maximum = max(counts_maximum, count)
+		counts_total += count
+
+	    # Print the sonar numbers:
+	    line = ""
+	    for index in range(len(counts)):
+		line += " {0:02d}".format(index)
+	    print(line)
+
+	    # Print the first summary line:
+	    line = ""
+	    for count in counts:
+		line += " {0:2d}".format(count)
+	    line += " Total {0}".format(counts_total)
+	    print(line)
+
+	    # Print the actual histogram one line at a time:
+            for line_index in range(counts_maximum):
+		# Assemble one *line* of historgram:
+		line = ""
+		for index in range(len(counts)):
+		    if line_index >= counts[index]:
+			line += "   "
+		    else:
+			line += " **"
+
+		# Print out one histogram *line*:
+		print(line)
+
+	    # Step 3: Zero out *counts*:
+	    for index in range(len(counts)):
+		counts[index] = 0
+            mutex.release()
             
 	    # Sleep until next time:
 	    rate.sleep()
