@@ -111,7 +111,7 @@ class Bus_Server:
 	  rospy.get_param("~base_frame", 'base_link')
 	self.baud_rate_ = int(rospy.get_param("~baud", 57600))
 	self.poll_rate_ = rospy.get_param("~poll_rate", 25)
-	self.port_name_ = port_name = rospy.get_param("~port", "/dev/ttyACM0")
+	self.port_name_ = port_name = rospy.get_param("~port", "/dev/ttyAMA0")
 	self.timeout_ = rospy.get_param("~timeout", 0.5)
 
 	# Grab some parameters for dead reckoning:
@@ -136,20 +136,21 @@ class Bus_Server:
 	  encoder_resolution = encoder_resolution,
 	  gear_reduction = gear_reduction, ticks_per_meter = ticks_per_meter)
 
+	# Open the serial *connection* before setting up subscription to Twist:
+	self.connection_ = connection = \
+	  Connection(logger, port_name, 115200, self.timeout_)
+
+	# Set up command velocity pulisher (do before *cmd_vel_callback*)
+        # is setup.:
+	self.cmd_vel_ = Twist()
+	self.cmd_vel_pub_ = rospy.Publisher("cmd_vel", Twist, queue_size=5)
+
 	# Subscribe to *cmd_vel* topic:
 	self.cmd_vel_enabled_ = True
 	rospy.Subscriber("cmd_vel", Twist, self.cmd_vel_callback)
 
 	# Overall loop rate: should be faster than fastest sensor rate
 	self.rate_ = rospy.Rate(self.poll_rate_)
-
-	# Set up command velocity pulisher:
-	self.cmd_vel_ = Twist()
-	self.cmd_vel_pub_ = rospy.Publisher("cmd_vel", Twist, queue_size=5)
-
-	# Open the serial *connection*:
-	self.connection_ = connection = \
-	  Connection(logger, port_name, 115200, self.timeout_)
 
 	# Slurp in the PID parameters:
 	Kp = rospy.get_param("~Kp", 20)
