@@ -116,11 +116,12 @@ class Bus_Server:
 
 	# Probe for standard ports:
 	if port_name == "":
-	    if os.path.exists("/dev/ttyACM0"):
-		port_name = "/dev/ttyACM0"
+	    if os.path.exists("/dev/ttyAMA0"):
+		port_name = "/dev/ttyAMA0"
 	    elif os.path.exists("/dev/ttyUSB0"):
 		port_name = "/dev/ttyUSB0"
 	    self.port_name_ = port_name
+        print("port_name='{0}'".format(port_name))
 
 	# Grab some parameters for dead reckoning:
 	self.encoder_resolution_ = encoder_resolution = \
