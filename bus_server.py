@@ -195,8 +195,8 @@ class Bus_Server:
 	    if sensor_type == "Sonar":
 		# Grab fields:
 		field_of_view = params.pop("field_of_view", .43632347)
-		min_range = params.pop("min_range", 0.02)
-		max_range = params.pop("max_range", 100.00)
+		min_range = params.pop("min_range", 0.15)
+		max_range = params.pop("max_range", 10.00)
 		class_name = params.pop("class", "Unknown")
 		left_id = params.pop("left_id", "Unknown")
 		right_id = params.pop("right_id", "Unknown")
