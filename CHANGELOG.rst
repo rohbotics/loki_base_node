@@ -2,8 +2,8 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.0 (2016-01-17)
+------------------
 * Added sonar statistics install rule
 * Updated package.xml
 * Added install rules
