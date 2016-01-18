@@ -143,6 +143,7 @@ include_directories(
 install(PROGRAMS
   scripts/bus_server_server.py
   bus_server.py
+  sonar_statistics.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
