@@ -1,5 +1,7 @@
 # bus_server
 
+[![Build Status](https://travis-ci.org/UbiquityRobotics/bus_server.svg?branch=master)](https://travis-ci.org/UbiquityRobotics/bus_server)
+
 The bus_server module is one of many firmware side pieces of code used in the Ubiquity Robotics platforms that use a ROS Arduino Bridge subsystem such as Loki and Freya.
 
 These commands are in general a subset of the official ROS Arduino Bridge commands with other commands added that use letters not defined by the official ROS Arduino Package as seen in ROS Hydra.
