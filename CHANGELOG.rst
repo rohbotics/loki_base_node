@@ -2,6 +2,11 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Added minor travis stuff
+* Contributors: Rohan Agrawal
+
 0.1.0 (2016-01-17)
 ------------------
 * Added sonar statistics install rule
