@@ -286,7 +286,7 @@ class Bus_Server:
 	    # Send a command the causes the motors to spin:
 	    request_left = int(left * ticks_per_meter / pid_rate)
 	    request_right = int(right * ticks_per_meter / pid_rate)
-	    #print("left {0} right {1}".format(request_left, request_right))
+	    print("left {0} right {1}".format(request_left, request_right))
 	    connection.execute("m {0} {1}".format(request_left, request_right))
 
     def poll_loop(self):
