@@ -286,6 +286,7 @@ class Bus_Server:
 	    # Send a command the causes the motors to spin:
 	    request_left = int(left * ticks_per_meter / pid_rate)
 	    request_right = int(right * ticks_per_meter / pid_rate)
+	    #print("left {0} right {1}".format(request_left, request_right))
 	    connection.execute("m {0} {1}".format(request_left, request_right))
 
     def poll_loop(self):
@@ -321,7 +322,7 @@ class Bus_Server:
 
 		# Grab the next back of sensor values from the sensor queue:
 		poll_values = connection.execute("q").split()
-		print("Poll: {0}".format(poll_values))
+		#print("Poll: {0}".format(poll_values))
 
 		# The first value in *poll_values* is the number of
 		# microseconds that have elapsed on the robot since
