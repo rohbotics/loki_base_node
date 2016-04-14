@@ -650,7 +650,7 @@ class Dead_Reckon:
 	self.right_encoder_time_ = time
 
 class Logger:
-    def __init__(self, verbose=True):
+    def __init__(self, verbose=False):
 	""" *Logger*: Initialize *self* with *verbose*.
 	"""
 
