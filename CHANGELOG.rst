@@ -2,8 +2,8 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.1 (2016-04-14)
+------------------
 * Added minor travis stuff
 * Contributors: Rohan Agrawal
 
