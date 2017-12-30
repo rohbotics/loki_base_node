@@ -2,6 +2,11 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* fix cmake error from rename
+* Contributors: Rohan Agrawal
+
 0.2.0 (2017-12-30)
 ------------------
 * change package name from bus_server to loki_base_node
