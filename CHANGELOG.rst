@@ -2,8 +2,8 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.1 (2017-12-30)
+------------------
 * fix cmake error from rename
 * Contributors: Rohan Agrawal
 

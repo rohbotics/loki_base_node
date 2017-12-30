@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package>
   <name>loki_base_node</name>
-  <version>0.2.0</version>
+  <version>0.2.1</version>
   <description>loki_base_node has a ROS node to communicate with the Loki robot base and allow communication with the motors and sonars</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
