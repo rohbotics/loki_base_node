@@ -2,8 +2,8 @@
 Changelog for package bus_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.0 (2017-12-30)
+------------------
 * change package name from bus_server to loki_base_node
 * Contributors: Rohan Agrawal
 
