@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>bus_server</name>
+  <name>loki_base_node</name>
   <version>0.1.1</version>
-  <description>The bus_server package</description>
+  <description>loki_base_node has a ROS node to communicate with the Loki robot base and allow communication with the motors and sonars</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
