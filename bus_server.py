@@ -66,6 +66,44 @@ with relatively low latency.
 It should be mentioned, that the "q" command is used to read the encoders
 as well.  This results in better odometry.
 
+The line speed is set to 115200 baud.  Using the a serial line program (like
+`minicom`) you can directly connect to the serial port (usually `/dev/ttyAMA0`
+for the RasPi or `/dev/ttyUSB0` if plugged directly into the workstation.)
+The characters are *NOT* echoed, so you have to type blind.
+
+Here is the command list for the protocol:
+
+* `b`: Return the baud rate of the link.
+
+* `e`: Directly print out the left and right encoder values.
+
+* `m left right`: Set the motor speeds to `left` and `right`, where the speed are
+  a signed integer.  The speeds are truncated to be between -126 and 126 where
+  -126 is full power in the reverse direction and 126 is full power in the forward
+  direction.
+
+* `o sonar`: Print the last distance from `sonar`, where `sonar` is between 0 and 15.
+
+* `p sonar`: Print out last distance from `sonar`, where `sonar` is between 0 and 15.
+  If `sonar` is greater than 15, print out all sonars.
+
+* `q`: Print out the sonar/encoder queue.
+
+* `r`: Reset the encoders.
+
+* `s sonar class left_sonar right_sonar`: Configure sonar `sonar` to be in `class` with
+  the sonar to the left as `left_sonar` and the sonar to the right as `right_sonar`.
+
+* `u Kp Kd Ki Ko i`: Update the PID constants where `Kp` is the proprotional value,
+  `Kd` is the derivative value, `Ki` is the integral value,` `Ko` is the common 
+  denominato for `Kp`, `Kd`, and `Ki`.  `Ci` is the intergral cap.  If no values
+  are sent, the current values are printed back.
+
+* `v verbosity`: Set the debugging verbosity level to `vebosity`.
+
+* `z left_pwm right_pwm`: Directly set the left motor PWM to `left_pwm` and
+  the right motor PWM to `right_pwm`.  This by-passes the PID loops.
+
 """
 
 # Put all of the imports into alphabetical order:
