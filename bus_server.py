@@ -156,7 +156,7 @@ class Bus_Server:
 
 	# Subscribe to *cmd_vel* topic:
 	self.cmd_vel_enabled_ = True
-	rospy.Subscriber("cmd_vel", Twist, self.cmd_vel_callback)
+	rospy.Subscriber("cmd_vel", Twist, self.cmd_vel_callback, queue_size=1)
 
 	# Overall loop rate: should be faster than fastest sensor rate
 	self.rate_ = rospy.Rate(self.poll_rate_)
